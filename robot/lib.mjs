@@ -19,6 +19,9 @@ export function eachDay(fromStr, toStr) {
 export const num = (v) => { const n = typeof v === "number" ? v : parseFloat(String(v ?? "0").replace(",", ".")); return isFinite(n) ? n : 0; };
 export const r2 = (v) => Math.round(v * 100) / 100;
 
+const MAX_WAIT_MS = 3 * 60 * 1000; // дольше 3 минут на один ответ не ждём
+const fmtWait = (ms) => (ms >= 3600e3 ? `${(ms / 3600e3).toFixed(1).replace(".", ",")} ч` : `${Math.round(ms / 60e3)} мин`);
+
 // HTTP с повтором при 429/5xx. fetchImpl можно подменить (демо и тесты).
 export function makeHttp(fetchImpl = globalThis.fetch, log = () => {}) {
   return async function http(url, { method = "GET", headers = {}, body, tries = 5, okEmpty = [] } = {}) {
@@ -34,6 +37,11 @@ export function makeHttp(fetchImpl = globalThis.fetch, log = () => {}) {
       if (res.status === 429 || res.status >= 500) {
         if (i === tries) throw new Error(`HTTP ${res.status} ${url}`);
         const wait = Number(res.headers?.get?.("X-Ratelimit-Retry") || res.headers?.get?.("Retry-After") || 0) * 1000 || 20000 * i;
+        // Площадка просит ждать слишком долго (бывает 6 часов) — не ждём, этот раздел пропускаем до следующего запуска
+        if (wait > MAX_WAIT_MS) {
+          const err = new Error(`площадка временно ограничила запросы (лимит), просит подождать ${fmtWait(wait)} — возьмём в следующий запуск`);
+          err.status = 429; err.limit = true; throw err;
+        }
         log(`  …${res.status}, жду ${Math.round(wait / 1000)} с`);
         await sleep(wait); continue;
       }

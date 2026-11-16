@@ -76,13 +76,18 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
   const fin = finAgg();
   const dFrom = daysAgo(finDays, now), dTo = daysAgo(1, now);
   let rrdId = 0, maxDate = null;
-  for (let guard = 0; guard < 100; guard++) {
-    const rows = (await http(`${H.finance}/api/finance/v1/sales-reports/detailed`, { method: "POST", headers: auth, body: { dateFrom: dFrom, dateTo: dTo, limit: 100000, rrdId } })) || [];
-    for (const r of rows) addWbFinRow(fin, r, pid, "*" + store.id);
-    for (const r of rows) if (r.dateTo && (!maxDate || r.dateTo > maxDate)) maxDate = r.dateTo;
-    if (rows.length < 100000) break;
-    rrdId = rows[rows.length - 1].rrdId;
-    await sleep(pause);
+  try {
+    for (let guard = 0; guard < 100; guard++) {
+      const rows = (await http(`${H.finance}/api/finance/v1/sales-reports/detailed`, { method: "POST", headers: auth, body: { dateFrom: dFrom, dateTo: dTo, limit: 100000, rrdId } })) || [];
+      for (const r of rows) addWbFinRow(fin, r, pid, "*" + store.id);
+      for (const r of rows) if (r.dateTo && (!maxDate || r.dateTo > maxDate)) maxDate = r.dateTo;
+      if (rows.length < 100000) break;
+      rrdId = rows[rows.length - 1].rrdId;
+      await sleep(pause);
+    }
+  } catch (e) {
+    if (!e.limit) throw e;
+    warnings.push(`Отчёт о реализации WB: ${e.message}`); // остальное (заказы, реклама, остатки) всё равно соберём
   }
 
   // 5. Реклама по артикулам (статистика кампаний)
