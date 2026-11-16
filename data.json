@@ -1,0 +1,88 @@
+{
+  "rates": {
+    "date": "2026-11-14",
+    "source": "ЦБ РФ (cbr-xml-daily.ru)",
+    "items": [
+      {
+        "code": "CNY",
+        "name": "Юань",
+        "value": 12.3149,
+        "previous": 12.4009,
+        "change": -0.086
+      },
+      {
+        "code": "USD",
+        "name": "Доллар",
+        "value": 82.1516,
+        "previous": 82.9803,
+        "change": -0.8287
+      },
+      {
+        "code": "EUR",
+        "name": "Евро",
+        "value": 91.0322,
+        "previous": 92.3322,
+        "change": -1.3
+      }
+    ]
+  },
+  "checked": {
+    "rates": "2026-11-16T12:10+05:00",
+    "news": "2026-11-16T12:10+05:00"
+  },
+  "news": {
+    "source": "Google Новости",
+    "groups": [
+      {
+        "mp": "wb",
+        "label": "Wildberries",
+        "items": [
+          {
+            "title": "Пострадавшие селлеры Wildberries из Татарстана оказались на грани банкротства",
+            "source": "Реальное время",
+            "link": "https://news.google.com/rss/articles/CBMipwFBVV95cUxNaDFFX2k5cS1VeDhRTEtjYkd0VUxCeHN4M3RBYWR4RHhWNHlpc2d6WWo0MXU2cjJ4V25qY2ZfMTRzU2x1cnN2MloxdHAya1NGUlpiYlVfNTNsZUhqdXlZS25OZjhGQVNIeEtlQ1BhTEZIWEVSdWU5ekxqRldTY0gwR3drS3JiSWgzR0cxZERXTVJBc2ppQWhzMW1VMHE2YUQzNi1WWjdnYw?oc=5",
+            "date": "2026-11-16T02:00+05:00"
+          },
+          {
+            "title": "Нет слотов на поставку Wildberries: может ли площадка штрафовать продавца за поставку, которую сорвал склад?",
+            "source": "zakon.ru",
+            "link": "https://news.google.com/rss/articles/CBMizgFBVV95cUxNN3ZDSVZlQjkySGllWVlLcm51QjR1bE1zVEN2b1VrelZ2NFRVVEI4RXJDeUNwNzRZeXRvV2JXS055V05xdEVuWEdFeDB3cFBWTDU3OFFyU2NSdmJtaHQtZFpfcEM0aHMzSXdYSUI4cmxYR0VmNlo1M3FnS0wwc3VsbTVTR3gyVjhZMmtOOGp1VDJOUUZTY0xCbE9ELVNFNmV1cThHUTk3R2lhYWRDdDdfMlBydEVHTDdIeGJTMW5IZC0zcGQ3cEptTEZXeERjUQ?oc=5",
+            "date": "2026-11-15T18:57+05:00"
+          },
+          {
+            "title": "Wildberries запустил платформу по поиску сотрудников для продавцов маркетплейса",
+            "source": "Shopper’s",
+            "link": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPR0o5TE5LNGpkVU5vWE9VZkVhNHdBYnZyLUNXS3pTczAxWmNzWkpfQnpDZ3NrVlIwV1pIcUhvaUJtcEwyZl9GZnROeDFJaUg4NkFBUmVuODFULUV1a2hCSUFNdVhiSVdkcC00WXNWYkkySFVhcVREMjJGejFqSGRrdF8zeVVBb0k0bVpvMHo0SXR5UGdJc2ZPZ2o3YnF1dnRuR3lGbGxxN3RrX19aMzN4UU8wM00?oc=5",
+            "date": "2026-11-13T19:00+05:00"
+          }
+        ]
+      },
+      {
+        "mp": "ozon",
+        "label": "Ozon",
+        "items": [
+          {
+            "title": "Эксперты прогнозируют рост цен на Ozon на 3–5% из-за новых штрафов",
+            "source": "Retail.ru",
+            "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxNZHpPb1lKN0ppVDlBcWZNdVFPMWg5bWxyYWw3bGRQTWtBbzlDT09XLWFVanlLX0lkTlBmY21hYmNKcXpKOTRTVnh0YThfYkFqNzJ3V3FhZDNxWVd2eVlMZEY2elVOQXBOVGxDLUE3VXgzSGhGb25KeVhUYVdSeXgweE5feHN6TU5jeDBNUF9KdW9RQU45SzluNkhqSHZYSEF1dUJocndYYjRXZTJvT2dmd1A4Nk1BUVVacDJRSFln?oc=5",
+            "date": "2026-11-13T13:05+05:00"
+          },
+          {
+            "title": "Новые правила Ozon приведут к увеличению расходов продавцов и цен на маркетплейсах",
+            "source": "New-Retail.ru",
+            "link": "https://news.google.com/rss/articles/CBMiugFBVV95cUxOcGh6Qmh2VmdBQy1URkJ5UUF2UkhSRE1GbW1zdXhzdmduVnJwWUk1V2tRTE1VU0lPQjMyRTlGMVlVUWkwdzNNRDRmNmFsQi1FNFA5cWF5Ml9jX2tfSmlsZzN1Ni1VNldSSW1wSGxWU3dNSGUwX3VSdnBuSW1YMzZUVGtlZVZ2WUVaN1QxMlRjLXVzUVUxM0V0UWt6R2x2akN2aUtCcl84MDJlYVgtOWsxaTdYREhJc21LYmc?oc=5",
+            "date": "2026-11-13T02:00+05:00"
+          },
+          {
+            "title": "Продавцам Wildberries дадут поддержку и после ударов ракет, как на Ozon",
+            "source": "PPT.ru",
+            "link": "https://news.google.com/rss/articles/CBMirwFBVV95cUxOMmxzWUNZODBmckFaZkRQc3dkOUppdDI1TS0wT3Z3VmpkSEd0cUJMZ3BRVGRJelJmUE1uTVdqbk9RQ1FQWnB2Qk9zWXFoLTloN290eHVTSXpCd1FrZTlkRy1HeVVwZ1VqdHR3ejB5VGZkZGx0UHZ0T1B1NHMzbGdrZFRlazA1YndCN25HbWg3Z2FZUGNCMW9fS0x6S290R3QzVVBsZkxFeDgxSUg0aC1z0gG0AUFVX3lxTE9lNFU3bFJzdW83bDR0WHM3Znh6WUFqZTlXR2syWGg2bTk1UktwbkxjTU5pTkZwZVVDMmFBelJHV0JrWHNsMGhxNHkyQ2I4NF82WnZDRmpmbHdQRjdmcTBYdkQ3RFdBTGVHU293NDJqNEs5aHFtWC13cnlkTmRKSUFWdUtKSGRtcHBZdTEyOGRwdUVFUkV6empOMGxEQ0k2NWZISmRuT2FLN2M4OGU0b09WdDlodQ?oc=5",
+            "date": "2026-11-12T14:36+05:00"
+          }
+        ]
+      }
+    ]
+  },
+  "updated_at": "2026-11-16T12:10+05:00",
+  "errors": []
+}

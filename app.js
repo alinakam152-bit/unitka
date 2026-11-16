@@ -227,7 +227,8 @@
           <p class="muted small">Хотите посмотреть, как всё устроено?</p>
           <button class="btn" data-act="demo">Открыть на выдуманных товарах</button>
         </div>
-      </section>`;
+      </section>
+      <div class="pub-lock">${pubPanel()}</div>`;
     // Поле обычное текстовое (не «пароль»): в поле пароля iPhone и Android дают только латиницу.
     // Точки вместо букв рисует CSS-класс .secret; галочка «Показать фразу» его снимает.
     app.querySelector("#show-phrase").addEventListener("change", (e) => {
@@ -255,6 +256,42 @@
       setData(await decrypt(window.UNITKA_DEMO, window.UNITKA_DEMO_PHRASE));
       location.hash = "#/"; render(); toast("Открыты выдуманные товары");
     } catch (e) { toast("Не получилось открыть выдуманные данные"); }
+  }
+
+  // ================= Открытые данные: курсы ЦБ и новости (data.json) =================
+  // Файл обновляет задание GitHub «Открытые данные» (fetch.py) дважды в день. Он публичный, без шифрования.
+  let PUB = null, PUB_ERR = false;
+  async function loadPub() {
+    try {
+      const r = await fetch("data.json?" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      PUB = await r.json(); PUB_ERR = false;
+    } catch (e) { PUB_ERR = true; }
+    const el = document.getElementById("pub");
+    if (el) el.outerHTML = pubPanel();
+  }
+  const whenEkb = (iso) => (iso ? `${dmy(iso.slice(0, 10))} в ${iso.slice(11, 16)}` : "—");
+  const nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function pubPanel() {
+    if (!PUB) {
+      const msg = PUB_ERR
+        ? "Не получилось загрузить курсы и новости — нет интернета или файл ещё не создан. Остальная Юнитка работает как обычно."
+        : "Загружаю курсы и новости…";
+      return `<section class="panel pub" id="pub"><h2>Курсы и новости</h2><p class="muted small">${msg}</p></section>`;
+    }
+    const r = PUB.rates, n = PUB.news;
+    const rates = r ? `<div class="pub-rates">${r.items.map((x) => {
+      const ch = x.change, arrow = ch > 0 ? "▲" : ch < 0 ? "▼" : "•";
+      return `<div><div class="k">${esc(x.name)}</div><div class="v">${nf2.format(x.value)} ₽</div><div class="s ${ch > 0 ? "num-loss" : ch < 0 ? "num-profit" : "muted"}">${arrow} ${nf2.format(Math.abs(ch))} за день</div></div>`;
+    }).join("")}</div><p class="muted small">Курс ЦБ на ${dmy(r.date)}. Рост юаня/доллара — закупка в рублях дорожает.</p>` : "";
+    const news = n ? n.groups.map((g) => `<h3>${chip(g.mp)} новости для продавцов</h3><ul class="pub-news">${g.items.map((it) =>
+      `<li><a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.title)}</a><span class="muted small">${esc(it.source)}${it.date ? " · " + dm(it.date.slice(0, 10)) : ""}</span></li>`).join("")}</ul>`).join("") : "";
+    return `<section class="panel pub" id="pub">
+      <h2>Курсы и новости</h2>
+      <p class="updated">Обновлено ${whenEkb(PUB.updated_at)} (Екб)${PUB_ERR ? " · сейчас без связи, показаны сохранённые" : ""}</p>
+      ${rates}${news}
+      <p class="muted small">Источники: ЦБ РФ, Google Новости. Обновляется само в 08:00 и 14:00 по Екатеринбургу.</p>
+    </section>`;
   }
 
   // ================= Общие блоки =================
@@ -314,7 +351,8 @@
           <h2>На что обратить внимание</h2>
           ${attentionList()}
         </section>
-      </div>`;
+      </div>
+      ${pubPanel()}`;
   }
 
   function ordersChart(byDay, prevDay, from, to, n) {
@@ -995,5 +1033,6 @@
       catch (e) { lockMsg = e.code === "nofile" ? "" : "Запомненная фраза больше не подходит — введите её заново"; }
     }
     render();
+    loadPub();
   })();
 })();

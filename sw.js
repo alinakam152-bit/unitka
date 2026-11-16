@@ -1,16 +1,16 @@
 /* Юнитка — service worker: приложение открывается без интернета.
    ВАЖНО: при КАЖДОЙ выкладке повышай VERSION (v1 → v2 → v3 ...),
    иначе телефон будет показывать старую версию. */
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = "unitka-" + VERSION;
 
 // Файлы приложения — ровно так, как они подключены в index.html
 const APP_FILES = [
   "./",
   "index.html",
-  "style.css?v=6",
-  "demo-data.js?v=6",
-  "app.js?v=6",
+  "style.css?v=7",
+  "demo-data.js?v=7",
+  "app.js?v=7",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-192.png",
@@ -45,11 +45,12 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // 2) Данные data.enc: сначала интернет, без сети — последние сохранённые
-  if (same && url.pathname.endsWith("/data.enc")) {
+  // 2) Данные data.enc и открытые data.json: сначала интернет, без сети — последние сохранённые
+  const dataFile = ["data.enc", "data.json"].find((n) => url.pathname.endsWith("/" + n));
+  if (same && dataFile) {
     e.respondWith(
-      fetch(req).then((res) => { if (res.ok) putCopy("data.enc", res); return res; })
-        .catch(() => caches.match("data.enc").then((r) => r || Response.error()))
+      fetch(req).then((res) => { if (res.ok) putCopy(dataFile, res); return res; })
+        .catch(() => caches.match(dataFile).then((r) => r || Response.error()))
     );
     return;
   }

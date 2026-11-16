@@ -397,3 +397,18 @@ table.report { border-collapse: collapse; width: 100%; min-width: 720px; }
 
 /* Фраза скрыта точками, но клавиатура остаётся любой (в т.ч. русской) */
 .secret { -webkit-text-security: disc; text-security: disc; }
+
+/* Открытые данные: курсы ЦБ и новости (data.json) */
+.pub { margin-top: 16px; }
+.pub h3 { font-size: 1rem; margin: 16px 0 6px; display: flex; align-items: center; gap: 8px; }
+.pub-rates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 4px; }
+.pub-rates .k { font-size: .8rem; color: var(--ink-2); }
+.pub-rates .v { font-size: 1.2rem; font-weight: 600; }
+.pub-rates .s { font-size: .8rem; }
+.pub-news { list-style: none; margin: 0; padding: 0; }
+.pub-news li { padding: 8px 0; border-bottom: 1px dashed var(--line); display: grid; gap: 2px; }
+.pub-news li:last-child { border-bottom: 0; }
+.pub-news a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.pub-news a:hover { text-decoration: underline; }
+.pub-lock { max-width: 460px; margin: 0 auto 8vh; }
+@media (max-width: 420px) { .pub-rates .v { font-size: 1rem; } }
