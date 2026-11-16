@@ -27,8 +27,8 @@
     ]
   },
   "checked": {
-    "rates": "2026-11-16T12:10+05:00",
-    "news": "2026-11-16T12:10+05:00"
+    "rates": "2026-11-16T12:12+05:00",
+    "news": "2026-11-16T12:12+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -62,6 +62,12 @@
         "label": "Ozon",
         "items": [
           {
+            "title": "Эксперты спрогнозировали подорожание товаров на Ozon из-за новой системы штрафов для продавцов",
+            "source": "Т—Ж",
+            "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE1tMUJVaUNPUlB6X3VrTUdGaV92WWZkZ0pnYXVueGNwYnFOMW1HR2h6dS1jUklFbmJIQ0tzZldnRmJCcm5SR25oYWpBV3p3Z1V1b2w4YkZCT1RFUQ?oc=5",
+            "date": "2026-11-13T14:04+05:00"
+          },
+          {
             "title": "Эксперты прогнозируют рост цен на Ozon на 3–5% из-за новых штрафов",
             "source": "Retail.ru",
             "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxNZHpPb1lKN0ppVDlBcWZNdVFPMWg5bWxyYWw3bGRQTWtBbzlDT09XLWFVanlLX0lkTlBmY21hYmNKcXpKOTRTVnh0YThfYkFqNzJ3V3FhZDNxWVd2eVlMZEY2elVOQXBOVGxDLUE3VXgzSGhGb25KeVhUYVdSeXgweE5feHN6TU5jeDBNUF9KdW9RQU45SzluNkhqSHZYSEF1dUJocndYYjRXZTJvT2dmd1A4Nk1BUVVacDJRSFln?oc=5",
@@ -72,17 +78,11 @@
             "source": "New-Retail.ru",
             "link": "https://news.google.com/rss/articles/CBMiugFBVV95cUxOcGh6Qmh2VmdBQy1URkJ5UUF2UkhSRE1GbW1zdXhzdmduVnJwWUk1V2tRTE1VU0lPQjMyRTlGMVlVUWkwdzNNRDRmNmFsQi1FNFA5cWF5Ml9jX2tfSmlsZzN1Ni1VNldSSW1wSGxWU3dNSGUwX3VSdnBuSW1YMzZUVGtlZVZ2WUVaN1QxMlRjLXVzUVUxM0V0UWt6R2x2akN2aUtCcl84MDJlYVgtOWsxaTdYREhJc21LYmc?oc=5",
             "date": "2026-11-13T02:00+05:00"
-          },
-          {
-            "title": "Продавцам Wildberries дадут поддержку и после ударов ракет, как на Ozon",
-            "source": "PPT.ru",
-            "link": "https://news.google.com/rss/articles/CBMirwFBVV95cUxOMmxzWUNZODBmckFaZkRQc3dkOUppdDI1TS0wT3Z3VmpkSEd0cUJMZ3BRVGRJelJmUE1uTVdqbk9RQ1FQWnB2Qk9zWXFoLTloN290eHVTSXpCd1FrZTlkRy1HeVVwZ1VqdHR3ejB5VGZkZGx0UHZ0T1B1NHMzbGdrZFRlazA1YndCN25HbWg3Z2FZUGNCMW9fS0x6S290R3QzVVBsZkxFeDgxSUg0aC1z0gG0AUFVX3lxTE9lNFU3bFJzdW83bDR0WHM3Znh6WUFqZTlXR2syWGg2bTk1UktwbkxjTU5pTkZwZVVDMmFBelJHV0JrWHNsMGhxNHkyQ2I4NF82WnZDRmpmbHdQRjdmcTBYdkQ3RFdBTGVHU293NDJqNEs5aHFtWC13cnlkTmRKSUFWdUtKSGRtcHBZdTEyOGRwdUVFUkV6empOMGxEQ0k2NWZISmRuT2FLN2M4OGU0b09WdDlodQ?oc=5",
-            "date": "2026-11-12T14:36+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-16T12:10+05:00",
+  "updated_at": "2026-11-16T12:12+05:00",
   "errors": []
 }
