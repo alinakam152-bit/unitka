@@ -1,16 +1,16 @@
 /* Юнитка — service worker: приложение открывается без интернета.
    ВАЖНО: при КАЖДОЙ выкладке повышай VERSION (v1 → v2 → v3 ...),
    иначе телефон будет показывать старую версию. */
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = "unitka-" + VERSION;
 
 // Файлы приложения — ровно так, как они подключены в index.html
 const APP_FILES = [
   "./",
   "index.html",
-  "style.css?v=7",
-  "demo-data.js?v=7",
-  "app.js?v=7",
+  "style.css?v=8",
+  "demo-data.js?v=8",
+  "app.js?v=8",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-192.png",

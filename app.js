@@ -212,7 +212,7 @@
     const isFile = location.protocol === "file:";
     app.innerHTML = `
       <section class="lock">
-        <h1>Юнитка</h1>
+        <h1>Юнитка — прибыль WB и Ozon</h1>
         <p class="muted">Цифры магазинов лежат в зашифрованном файле. Введите фразу-расшифровку — она есть только у вас.</p>
         <form id="lock-form" autocomplete="off">
           <div class="field"><label for="phrase">Фраза</label>
