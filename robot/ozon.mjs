@@ -87,22 +87,24 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
       if (!prod.has(sku)) prod.set(sku, { pid: pid(sku), store: store.id, mp: "ozon", sku, offerId: it.offer_id || "", name: it.name || sku, category: "", photo: "", price: null });
     }
   };
-  try {
-    for (let offset = 0, guard = 0; guard < 200; guard++, offset += 1000) {
-      const res = await post("/v2/posting/fbo/list", { dir: "ASC", filter: { since, to }, limit: 1000, offset, with: { analytics_data: false, financial_data: false } });
-      const list = res?.result || [];
-      list.forEach(addPosting);
-      if (list.length < 1000) break;
+  // Новые методы Ozon (старые v2 FBO и v3 FBS отключены): постраничный обход по cursor.
+  // Ответ разбираем гибко: список может лежать в result.postings или прямо в result.
+  const listAll = async (path, label) => {
+    let cursor = "", pages = 0;
+    for (let guard = 0; guard < 300; guard++) {
+      const res = await post(path, { filter: { since, to }, limit: 1000, cursor, sort_dir: "ASC", with: { analytics_data: false, financial_data: false } });
+      const r = res?.result ?? res ?? {};
+      const list = Array.isArray(r) ? r : r.postings || res?.postings || [];
+      list.forEach(addPosting); pages++;
+      const next = (!Array.isArray(r) && r.cursor) || res?.cursor || "";
+      const hasNext = (!Array.isArray(r) && r.has_next) ?? res?.has_next;
+      if (!list.length || !next || hasNext === false || next === cursor) break;
+      cursor = next;
     }
-  } catch (e) { warnings.push(`Заказы FBO Ozon: ${e.message}`); }
-  try {
-    for (let offset = 0, guard = 0; guard < 200; guard++, offset += 1000) {
-      const res = await post("/v3/posting/fbs/list", { dir: "ASC", filter: { since, to }, limit: 1000, offset, with: { analytics_data: false, financial_data: false } });
-      const list = res?.result?.postings || [];
-      list.forEach(addPosting);
-      if (!res?.result?.has_next) break;
-    }
-  } catch (e) { warnings.push(`Заказы FBS Ozon: ${e.message}`); }
+    log(`    ${label}: страниц ${pages}`);
+  };
+  try { await listAll("/v3/posting/fbo/list", "FBO"); } catch (e) { warnings.push(`Заказы FBO Ozon: ${e.message}`); }
+  try { await listAll("/v4/posting/fbs/list", "FBS"); } catch (e) { warnings.push(`Заказы FBS Ozon: ${e.message}`); }
   out.orders = ord.rows();
 
   // 4. Начисления по дням (финансы)

@@ -101,15 +101,15 @@ export function mockFetch(now) {
     if (path === "/v3/product/list") return ok({ result: { items: body.last_id ? [] : items.map((it) => ({ product_id: it.sku + 5 })), last_id: "" } });
     if (path === "/v3/product/info/list") return ok({ items: items.map((it) => ({ id: it.sku + 5, sku: it.sku, offer_id: it.offer, name: it.name, marketing_price: String(it.price), primary_image: [] })) });
     if (path === "/v4/product/info/stocks") return ok({ items: items.map((it) => ({ product_id: it.sku + 5, stocks: [{ type: "fbo", present: it.stock, reserved: 2 }, { type: "fbs", present: it.i % 4 === 0 ? 50 : 0, reserved: 0 }] })), cursor: "" });
-    if (path === "/v2/posting/fbo/list" || path === "/v3/posting/fbs/list") {
-      if (body.offset) return ok(path.includes("fbs") ? { result: { postings: [], has_next: false } } : { result: [] });
+    if (path === "/v3/posting/fbo/list" || path === "/v4/posting/fbs/list") {
+      if (body.cursor) return ok({ result: { postings: [], cursor: "", has_next: false } });
       const salt = path.includes("fbs") ? 5 : 3;
       const posts = [];
       for (const d of eachDay(body.filter.since.slice(0, 10), today)) for (const it of items) {
         const n = salesFor(it, d, salt);
         for (let k = 0; k < n; k++) posts.push({ in_process_at: d + "T12:00:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: String(it.price), quantity: 1 }] });
       }
-      return ok(path.includes("fbs") ? { result: { postings: posts, has_next: false } } : { result: posts });
+      return ok({ result: { postings: posts, cursor: "", has_next: false } });
     }
     if (path === "/v1/finance/accrual/by-day") {
       const d = body.date, acc = [];

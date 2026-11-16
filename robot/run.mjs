@@ -30,6 +30,8 @@ async function main() {
   }
   const phrase = DEMO ? DEMO_PHRASE : env.UNITKA_PHRASE;
   if (!phrase) throw new Error("Нет фразы-расшифровки: задайте секрет UNITKA_PHRASE");
+  // Проверяем длину сразу, чтобы не собирать данные зря (шифрование требует от 12 символов)
+  if (phrase.length < 12) throw new Error(`Фраза в секрете UNITKA_PHRASE слишком короткая: ${phrase.length} симв., нужно от 12 (4–5 слов через пробел)`);
 
   // Прошлые данные — чтобы при сбое одного магазина не потерять его цифры
   const encPath = join(ROOT, "data.enc");
