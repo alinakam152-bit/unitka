@@ -1,5 +1,5 @@
 // Сбор данных одного магазина Ozon. Только чтение.
-import { F, finAgg, Agg, num, daysAgo, eachDay } from "./lib.mjs";
+import { F, finAgg, Agg, OrdAgg, mskParts, num, daysAgo, eachDay } from "./lib.mjs";
 
 const HOST = "https://api-seller.ozon.ru";
 
@@ -24,7 +24,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   const post = (path, body) => http(HOST + path, { method: "POST", headers, body });
   const pid = (sku) => `${store.id}:${sku}`;
   const warnings = [];
-  const out = { products: [], stocks: null, orders: [], fin: [], ads: [], finTo: null, warnings, tokenExpires: null };
+  const out = { products: [], stocks: null, orders: [], ordersFbs: [], ordH: [], fin: [], ads: [], finTo: null, warnings, tokenExpires: null };
 
   // 1. Товары
   log("  товары");
@@ -75,27 +75,27 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
 
   // 3. Заказы FBO и FBS
   log("  заказы");
-  const ord = new Agg(4);
+  const ord = new OrdAgg();
   const since = daysAgo(orderDays, now) + "T00:00:00.000Z", to = new Date(now).toISOString();
-  const addPosting = (p) => {
-    const d = String(p.in_process_at || p.created_at).slice(0, 10);
+  const addPosting = (p, fbs) => {
+    const { day: d, hour } = mskParts(p.in_process_at || p.created_at);
     const cancelled = p.status === "cancelled";
     for (const it of p.products || []) {
-      const q = num(it.quantity), sum = num(it.price) * q;
+      const q = num(it.quantity);
       const sku = String(it.sku);
-      ord.add(d, pid(sku), cancelled ? { 2: q, 3: sum, 4: q, 5: sum } : { 2: q, 3: sum });
+      ord.add(d, pid(sku), hour, fbs, cancelled, num(it.price), q);
       if (!prod.has(sku)) prod.set(sku, { pid: pid(sku), store: store.id, mp: "ozon", sku, offerId: it.offer_id || "", name: it.name || sku, category: "", photo: "", price: null });
     }
   };
   // Новые методы Ozon (старые v2 FBO и v3 FBS отключены): постраничный обход по cursor.
   // Ответ разбираем гибко: список может лежать в result.postings или прямо в result.
-  const listAll = async (path, label) => {
+  const listAll = async (path, label, fbs) => {
     let cursor = "", pages = 0;
     for (let guard = 0; guard < 3000; guard++) { // Ozon отдаёт максимум 100 отправлений за раз
       const res = await post(path, { filter: { since, to }, limit: 100, cursor, sort_dir: "ASC", with: { analytics_data: false, financial_data: false } });
       const r = res?.result ?? res ?? {};
       const list = Array.isArray(r) ? r : r.postings || res?.postings || [];
-      list.forEach(addPosting); pages++;
+      list.forEach((p) => addPosting(p, fbs)); pages++;
       const next = (!Array.isArray(r) && r.cursor) || res?.cursor || "";
       const hasNext = (!Array.isArray(r) && r.has_next) ?? res?.has_next;
       if (!list.length || !next || hasNext === false || next === cursor) break;
@@ -103,9 +103,9 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
     }
     log(`    ${label}: страниц ${pages}`);
   };
-  try { await listAll("/v3/posting/fbo/list", "FBO"); } catch (e) { warnings.push(`Заказы FBO Ozon: ${e.message}`); }
-  try { await listAll("/v4/posting/fbs/list", "FBS"); } catch (e) { warnings.push(`Заказы FBS Ozon: ${e.message}`); }
-  out.orders = ord.rows();
+  try { await listAll("/v3/posting/fbo/list", "FBO", false); } catch (e) { warnings.push(`Заказы FBO Ozon: ${e.message}`); }
+  try { await listAll("/v4/posting/fbs/list", "FBS", true); } catch (e) { warnings.push(`Заказы FBS Ozon: ${e.message}`); }
+  Object.assign(out, ord.result());
 
   // 4. Начисления по дням (финансы)
   log("  начисления");

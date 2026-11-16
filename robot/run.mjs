@@ -41,7 +41,7 @@ async function main() {
   }
 
   const http = makeHttp(fetchImpl, log);
-  const data = { v: 1, generatedAt: now.toISOString(), demo: DEMO, stores: [], products: [], stocks: {}, orders: [], fin: [], ads: [] };
+  const data = { v: 1, generatedAt: now.toISOString(), demo: DEMO, stores: [], products: [], stocks: {}, orders: [], ordersFbs: [], ordH: [], fin: [], ads: [] };
 
   for (const st of stores) {
     log(`Магазин «${st.name}» (${st.mp})`);
@@ -74,6 +74,7 @@ async function main() {
       data.products.push(...part.products);
       Object.assign(data.stocks, part.stocks || {});
       data.orders.push(...part.orders); data.fin.push(...part.fin); data.ads.push(...part.ads);
+      data.ordersFbs.push(...(part.ordersFbs || [])); data.ordH.push(...(part.ordH || []));
     }
   }
 
@@ -97,7 +98,7 @@ function takeStore(prev, id) {
   for (const [k, v] of Object.entries(prev.stocks || {})) if (mine(k)) stocks[k] = v;
   return { meta, part: {
     products: (prev.products || []).filter((p) => p.store === id), stocks,
-    orders: (prev.orders || []).filter((r) => mine(r[1])), fin: (prev.fin || []).filter((r) => mine(r[1])), ads: (prev.ads || []).filter((r) => mine(r[1]))
+    orders: (prev.orders || []).filter((r) => mine(r[1])), ordersFbs: (prev.ordersFbs || []).filter((r) => mine(r[1])), ordH: (prev.ordH || []).filter((r) => mine(r[1])), fin: (prev.fin || []).filter((r) => mine(r[1])), ads: (prev.ads || []).filter((r) => mine(r[1]))
   } };
 }
 

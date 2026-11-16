@@ -1,5 +1,5 @@
 // Сбор данных одного магазина Wildberries. Только чтение.
-import { F, finAgg, Agg, num, day, daysAgo, sleep, jwtExpires } from "./lib.mjs";
+import { F, finAgg, Agg, OrdAgg, num, day, daysAgo, sleep, jwtExpires } from "./lib.mjs";
 
 const H = {
   content: "https://content-api.wildberries.ru",
@@ -15,7 +15,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
   const auth = { Authorization: token };
   const pid = (nm) => `${store.id}:${nm}`;
   const warnings = [];
-  const out = { products: [], stocks: null, orders: [], fin: [], ads: [], finTo: null, warnings, tokenExpires: jwtExpires(token) };
+  const out = { products: [], stocks: null, orders: [], ordersFbs: [], ordH: [], fin: [], ads: [], finTo: null, warnings, tokenExpires: jwtExpires(token) };
 
   // 1. Карточки товаров
   log("  карточки");
@@ -53,7 +53,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
 
   // 3. Заказы (последние 60 дней — чтобы сравнивать 28 дней с прошлыми 28)
   log("  заказы");
-  const ord = new Agg(4); // qty, sum, cancelQty, cancelSum
+  const ord = new OrdAgg();
   const orderFrom = daysAgo(orderDays, now);
   let dateFrom = orderFrom + "T00:00:00";
   for (let guard = 0; guard < 20; guard++) {
@@ -61,15 +61,17 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
     for (const o of list) {
       const d = String(o.date).slice(0, 10);
       if (d < orderFrom) continue;
-      const price = num(o.priceWithDisc);
-      ord.add(d, pid(o.nmId), o.isCancel ? { 2: 1, 3: price, 4: 1, 5: price } : { 2: 1, 3: price });
+      // время заказа WB приходит уже по Москве: "2026-11-15T13:45:00"
+      const hour = Number(String(o.date).slice(11, 13));
+      const fbs = /продавц/i.test(String(o.warehouseType || ""));
+      ord.add(d, pid(o.nmId), hour, fbs, !!o.isCancel, num(o.priceWithDisc));
       if (!prod.has(o.nmId)) prod.set(o.nmId, { pid: pid(o.nmId), store: store.id, mp: "wb", sku: String(o.nmId), offerId: o.supplierArticle || "", name: [o.brand, o.subject].filter(Boolean).join(" "), category: o.subject || "", photo: "", price: null });
     }
     if (list.length < 80000) break;
     dateFrom = list[list.length - 1].lastChangeDate;
     await sleep(pause);
   }
-  out.orders = ord.rows();
+  Object.assign(out, ord.result());
 
   // 4. Отчёт о реализации (финансы)
   log("  отчёт о реализации");

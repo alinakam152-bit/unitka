@@ -58,7 +58,7 @@ export function mockFetch(now) {
       const list = [];
       for (const d of eachDay(from, today)) for (const it of wbItems) {
         const n = salesFor(it, d, 1) + (Math.random() < 0 ? 1 : 0);
-        for (let k = 0; k < n; k++) list.push({ date: d + "T1" + (k % 10) + ":00:00", lastChangeDate: d + "T20:00:00", nmId: it.sku, supplierArticle: it.offer, subject: it.cat, brand: "Демо", priceWithDisc: it.price, isCancel: k === 3 });
+        for (let k = 0; k < n; k++) list.push({ date: d + "T" + String((7 + k * 5 + it.i * 3) % 24).padStart(2, "0") + ":" + String((k * 17) % 60).padStart(2, "0") + ":00", lastChangeDate: d + "T20:00:00", warehouseType: it.i % 5 === 0 && k % 2 ? "Склад продавца" : "Склад WB", nmId: it.sku, supplierArticle: it.offer, subject: it.cat, brand: "Демо", priceWithDisc: it.price, isCancel: k === 3 });
       }
       return ok(list);
     }
@@ -107,7 +107,7 @@ export function mockFetch(now) {
       const posts = [];
       for (const d of eachDay(body.filter.since.slice(0, 10), today)) for (const it of items) {
         const n = salesFor(it, d, salt);
-        for (let k = 0; k < n; k++) posts.push({ in_process_at: d + "T12:00:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: String(it.price), quantity: 1 }] });
+        for (let k = 0; k < n; k++) posts.push({ in_process_at: d + "T" + String((4 + k * 7 + it.i * 2) % 24).padStart(2, "0") + ":30:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: String(it.price), quantity: 1 }] });
       }
       return ok({ result: { postings: posts, cursor: "", has_next: false } });
     }

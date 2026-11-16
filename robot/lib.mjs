@@ -73,6 +73,35 @@ export class Agg {
   }
 }
 export const finAgg = () => new Agg(12);
+
+// Заказы подробно: по дням (все и отдельно FBS) и по часам. День и час — по Москве, как у площадок.
+//   orders    — [день, товар, шт, ₽, отменено шт, отменено ₽]        (все схемы, как раньше)
+//   ordersFbs — то же только по FBS (FBO = orders − ordersFbs)
+//   ordH      — [день, товар, час 0–23, шт, ₽, из них FBS шт, FBS ₽] (без отмен)
+export class OrdAgg {
+  constructor() { this.all = new Agg(4); this.fbs = new Agg(4); this.h = new Map(); }
+  add(day, pid, hour, fbs, cancel, price, qty = 1) {
+    const v = cancel ? { 2: qty, 3: price * qty, 4: qty, 5: price * qty } : { 2: qty, 3: price * qty };
+    this.all.add(day, pid, v);
+    if (fbs) this.fbs.add(day, pid, v);
+    if (cancel || !(hour >= 0 && hour < 24)) return;
+    const k = day + "|" + pid + "|" + hour;
+    const r = this.h.get(k) || [day, pid, hour, 0, 0, 0, 0];
+    r[3] += qty; r[4] += price * qty; if (fbs) { r[5] += qty; r[6] += price * qty; }
+    this.h.set(k, r);
+  }
+  result() {
+    return { orders: this.all.rows(), ordersFbs: this.fbs.rows(),
+      ordH: [...this.h.values()].map((r) => r.map((v, i) => (i < 3 ? v : r2(v)))).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[2] - b[2])) };
+  }
+}
+// Время Ozon приходит по Гринвичу — переводим в московское: { day: "2026-11-15", hour: 13 }
+export function mskParts(iso) {
+  const t = Date.parse(iso);
+  if (!isFinite(t)) return { day: String(iso).slice(0, 10), hour: -1 };
+  const m = new Date(t + 3 * 3600e3).toISOString();
+  return { day: m.slice(0, 10), hour: Number(m.slice(11, 13)) };
+}
 // fin.add(date, pid, {[F.rev]: 100, ...})
 
 // Срок действия токена WB (это JWT, в нём есть поле exp).

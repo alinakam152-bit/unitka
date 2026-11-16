@@ -1,7 +1,7 @@
 // Проверки робота: node robot/test.mjs
 import assert from "node:assert/strict";
 import { encrypt, decrypt } from "./crypto.mjs";
-import { finAgg, F } from "./lib.mjs";
+import { finAgg, F, OrdAgg, mskParts } from "./lib.mjs";
 import { addWbFinRow } from "./wb.mjs";
 import { addOzonAccrual, bucketOf } from "./ozon.mjs";
 
@@ -65,4 +65,18 @@ await t("Ozon: неразобранный остаток уходит в «пр�
   assert.equal(r[1], "*o"); assert.equal(r[F.logi], 77); assert.equal(r[F.pay], -77);
 });
 
+await t("Заказы: по часам и FBS сходятся с итогом, отмены не попадают в часы", async () => {
+  const o = new OrdAgg();
+  o.add("2026-11-15", "s:1", 13, false, false, 299, 2);
+  o.add("2026-11-15", "s:1", 13, true, false, 299, 1);
+  o.add("2026-11-15", "s:1", 22, true, true, 299, 1);   // отмена FBS
+  const r = o.result();
+  assert.deepEqual(r.orders, [["2026-11-15", "s:1", 4, 1196, 1, 299]]);
+  assert.deepEqual(r.ordersFbs, [["2026-11-15", "s:1", 2, 598, 1, 299]]);
+  assert.deepEqual(r.ordH, [["2026-11-15", "s:1", 13, 3, 897, 1, 299]]);
+});
+await t("Ozon: время по Гринвичу переводится в московское (и день тоже)", async () => {
+  assert.deepEqual(mskParts("2026-11-15T22:30:00Z"), { day: "2026-11-16", hour: 1 });
+  assert.deepEqual(mskParts("2026-11-15T09:05:00.000Z"), { day: "2026-11-15", hour: 12 });
+});
 console.log(`\nВсе проверки пройдены: ${n}`);
