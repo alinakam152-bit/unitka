@@ -62,6 +62,7 @@
   const F = { date: 0, pid: 1, rev: 2, sold: 3, ret: 4, comm: 5, logi: 6, stor: 7, acc: 8, pen: 9, acq: 10, ads: 11, comp: 12, pay: 13 };
   const COST_KEYS = ["comm", "logi", "stor", "acc", "pen", "acq"];
   let D = null;           // расшифрованные данные
+  const DAY = { home: null, fin: null }; // выбранный в календаре день (режим «1 день»); null — по умолчанию
   let IX = null;          // индексы
 
   function setData(data) {
@@ -70,7 +71,9 @@
     const stores = new Map(D.stores.map((s) => [s.id, s]));
     const today = dayStr(new Date(D.generatedAt));
     const finTos = D.stores.filter((s) => s.finTo).map((s) => s.finTo).sort();
-    IX = { prod, stores, today, finTo: finTos[0] || addDays(today, -1), finToMax: finTos[finTos.length - 1] || addDays(today, -1) };
+    const minOf = (rows) => rows.reduce((m, r) => (r[0] < m ? r[0] : m), today);
+    IX = { prod, stores, today, finTo: finTos[0] || addDays(today, -1), finToMax: finTos[finTos.length - 1] || addDays(today, -1), ordMin: minOf(D.orders), finMin: minOf(D.fin) };
+    DAY.home = null; DAY.fin = null;
   }
   const dayStr = (d) => new Date(d.getTime() + 3 * 3600e3).toISOString().slice(0, 10); // по Москве, как у площадок
   const addDays = (s, n) => new Date(Date.parse(s + "T00:00:00Z") + n * 86400e3).toISOString().slice(0, 10);
@@ -133,7 +136,8 @@
     const rate = taxRate();
     const tax = rate ? (state.tax.base === "profit" ? Math.max(0, pre - vat) * rate : Math.max(0, a.rev - vat) * rate) : 0;
     const profit = pre - vat - tax;
-    const margin = a.rev > 0 ? profit / a.rev : null;
+    const margin = a.rev > 0 ? profit / a.rev : null;            // маржа: прибыль после НДС и налога ÷ выручка
+    const roi = hasCost && cogs > 0 ? profit / cogs : null;       // рентабельность: прибыль после НДС и налога ÷ себестоимость
     const drr = a.rev > 0 ? a.ads / a.rev : null;
     const flags = [];
     if (!hasCost && (units > 0 || a.rev > 0)) flags.push("none");
@@ -141,7 +145,7 @@
     if (hasCost && profit >= 0 && margin != null && margin * 100 < state.thresholds.margin) flags.push("low");
     if (drr != null && drr * 100 > state.thresholds.drr) flags.push("drr");
     if (a.ads > 0 && units <= 0) flags.push("adsnosale");
-    return Object.assign({}, a, { pid, p, cost: hasCost ? cost : null, units, cogs, mpCost, vat, tax, profit, margin, drr, flags });
+    return Object.assign({}, a, { pid, p, cost: hasCost ? cost : null, units, cogs, mpCost, vat, tax, profit, margin, roi, drr, flags });
   }
   function vatShare() { const v = cleanVat(state.vat); return v ? v / (100 + v) : 0; }
   function taxRate() { const r = Number(state.tax.rate); return state.tax.rate == null || !isFinite(r) || r <= 0 ? 0 : r / 100; }
@@ -311,44 +315,66 @@
   }
   function demoNote() { return D.demo ? `<div class="demo-note">Выдуманные товары для проверки — это не ваши цифры. <button class="link" data-act="lock">Выйти</button></div>` : ""; }
 
+  // ================= Выбор дня (режим «1 день») =================
+  function dayPicker(kind, day, min, max) {
+    return `<div class="day-pick" role="group" aria-label="Выбор дня">
+      <button class="btn" data-act="day-step" data-v="${kind}" data-step="-1" ${day <= min ? "disabled" : ""} aria-label="Предыдущий день">←</button>
+      <input type="date" data-day="${kind}" value="${day}" min="${min}" max="${max}" aria-label="День">
+      <button class="btn" data-act="day-step" data-v="${kind}" data-step="1" ${day >= max ? "disabled" : ""} aria-label="Следующий день">→</button>
+      <button class="btn" data-act="day-set" data-v="${kind}" data-day="${addDays(IX.today, -1)}">Вчера</button>
+      <button class="btn" data-act="day-set" data-v="${kind}" data-day="${IX.today}">Сегодня</button>
+    </div>`;
+  }
+  const clampDay = (d, min, max) => (d < min ? min : d > max ? max : d);
+  // Какие магазины ещё не прислали отчёт за этот день (WB — раз в неделю)
+  function noReportNote(day) {
+    const late = D.stores.filter((st) => (state.view.stores === "all" || state.view.stores === st.id) && (!st.finTo || st.finTo < day));
+    return late.length ? `<p class="banner small">Отчётов за ${dmy(day)} пока нет: ${late.map((st) => `${esc(st.name)} (отчёты по ${dm(st.finTo)})`).join(", ")}. Их цифры за этот день не вошли.</p>` : "";
+  }
+  const afterTaxNote = () => (taxRate() || vatShare() ? `<p class="muted small">Маржа и рентабельность посчитаны от прибыли после ${[vatShare() ? `НДС ${state.vat}%` : "", taxRate() ? `налога ${state.tax.rate}%` : ""].filter(Boolean).join(" и ")}.</p>` : "");
+
   // ================= Главная =================
   function renderHome() {
     const n = Number(state.view.home) || 28;
-    const to = IX.today, from = addDays(to, -(n - 1));
+    const day = n === 1 ? clampDay(DAY.home || IX.today, IX.ordMin, IX.today) : null;
+    const to = day || IX.today, from = addDays(to, -(n - 1));
     const pFrom = addDays(from, -n), pTo = addDays(from, -1);
     const cur = aggOrders(from, to), prev = aggOrders(pFrom, pTo);
     const tot = (m) => [...m.byDay.values()].reduce((t, d) => ({ qty: t.qty + d.qty, sum: t.sum + d.sum, cq: t.cq + d.cq, cs: t.cs + d.cs }), { qty: 0, sum: 0, cq: 0, cs: 0 });
     const c = tot(cur), p = tot(prev);
     // Финансы за последние n дней, по которым есть отчёты
-    const fTo = IX.finTo, fFrom = addDays(fTo, -(n - 1));
+    const fTo = day || IX.finTo, fFrom = addDays(fTo, -(n - 1));
     const fin = aggFin(fFrom, fTo);
     const rows = [...fin.byP.entries()].map(([pid, a]) => calc(pid, a));
-    const fs = rows.reduce((t, r) => ({ rev: t.rev + r.rev, profit: t.profit + r.profit, ads: t.ads + r.ads, units: t.units + r.units }), { rev: 0, profit: 0, ads: 0, units: 0 });
+    const fs = rows.reduce((t, r) => ({ rev: t.rev + r.rev, profit: t.profit + r.profit, ads: t.ads + r.ads, units: t.units + r.units, cogs: t.cogs + r.cogs }), { rev: 0, profit: 0, ads: 0, units: 0, cogs: 0 });
     for (const l of fin.leftovers) { const x = calc("*" + l.storeId, l); fs.rev += x.rev; fs.profit += x.profit; fs.ads += x.ads; }
 
     app.innerHTML = `
       ${demoNote()}
       <div class="head-row"><h1>Главная</h1>${seg("home", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"]], n, "Период")}</div>
       ${storeChips()}
+      ${day ? dayPicker("home", day, IX.ordMin, IX.today) : ""}
       <div class="home-grid">
         <div class="home-left">
         <section class="panel chart-panel">
           <div class="kpis">
-            <div><div class="k">Заказано</div><div class="v">${rub(c.sum - c.cs)}</div><div class="s">${int(c.qty - c.cq)} шт ${delta(c.sum - c.cs, p.sum - p.cs)} ${n === 1 ? "к вчера" : `к прошлым ${n} дн.`}</div></div>
+            <div><div class="k">Заказано</div><div class="v">${rub(c.sum - c.cs)}</div><div class="s">${int(c.qty - c.cq)} шт ${delta(c.sum - c.cs, p.sum - p.cs)} ${n === 1 ? "к предыдущему дню" : `к прошлым ${n} дн.`}</div></div>
             <div><div class="k">Отмены</div><div class="v">${int(c.cq)} шт</div><div class="s">${pct(c.qty ? c.cq / c.qty : null)} заказов</div></div>
           </div>
           ${n === 1 ? ordersChart(aggOrders(addDays(to, -13), to).byDay, null, addDays(to, -13), to, 14) : ordersChart(cur.byDay, prev.byDay, from, to, n)}
-          <p class="muted small">${n === 1 ? `Цифры выше — за ${dmy(to)} (сегодня, день ещё не закончился) в сравнении со вчера. График — последние 14 дней` : `Заказы по дням, ₽ без отмен. Пунктир — предыдущие ${n} дней`}. Данные на ${dm(IX.today)}.</p>
+          <p class="muted small">${n === 1 ? `Цифры выше — за ${dmy(to)}${to === IX.today ? " (сегодня, день ещё не закончился)" : ""} в сравнении с ${dm(addDays(to, -1))}. График — 14 дней по ${dm(to)}` : `Заказы по дням, ₽ без отмен. Пунктир — предыдущие ${n} дней`}. Данные на ${dm(IX.today)}.</p>
         </section>
         <section class="panel fin-mini">
           <h2>Деньги по отчётам площадок</h2>
-          <p class="muted small">${n === 1 ? dmy(fTo) : dm(fFrom) + "–" + dm(fTo)} · отчёты WB приходят раз в неделю, поэтому период заканчивается ${dm(fTo)}</p>
+          <p class="muted small">${n === 1 ? dmy(fTo) : dm(fFrom) + "–" + dm(fTo) + " · отчёты WB приходят раз в неделю, поэтому период заканчивается " + dm(fTo)}</p>
+          ${day ? noReportNote(day) : ""}
           <div class="kpis four">
             <div><div class="k">Выручка</div><div class="v">${rub(fs.rev)}</div><div class="s">${int(fs.units)} шт выкуплено</div></div>
             <div class="main"><div class="k">Чистая прибыль</div><div class="v ${signCls(fs.profit)}">${rub(fs.profit)}</div></div>
-            <div><div class="k">Маржа</div><div class="v">${pct(fs.rev > 0 ? fs.profit / fs.rev : null)}</div></div>
+            <div><div class="k">Маржа</div><div class="v">${pct(fs.rev > 0 ? fs.profit / fs.rev : null)}</div><div class="s">рентабельность ${pct(fs.cogs > 0 ? fs.profit / fs.cogs : null)}</div></div>
             <div><div class="k">ДРР</div><div class="v">${pct(fs.rev > 0 ? fs.ads / fs.rev : null)}</div></div>
           </div>
+          ${afterTaxNote()}
           ${!taxRate() ? `<p class="banner small">Налог не указан — прибыль без налога. <a href="#/settings">Указать</a></p>` : ""}
           <a class="btn" href="#/profit">Прибыль по товарам</a>
         </section>
@@ -468,6 +494,7 @@
   // ================= Прибыль по товарам + ABC =================
   function finPeriod() {
     const n = Number(state.view.fin) || 28;
+    if (n === 1) { const d = clampDay(DAY.fin || IX.finToMax, IX.finMin, IX.today); return { n, from: d, to: d }; }
     return { n, from: addDays(IX.finTo, -(n - 1)), to: IX.finTo };
   }
   function profitRows() {
@@ -500,12 +527,12 @@
       return dir * ((a[key] ?? -Infinity) - (b[key] ?? -Infinity));
     });
     const all = rows.concat(leftovers);
-    const tot = all.reduce((t, r) => ({ rev: t.rev + r.rev, profit: t.profit + r.profit, ads: t.ads + r.ads }), { rev: 0, profit: 0, ads: 0 });
+    const tot = all.reduce((t, r) => ({ rev: t.rev + r.rev, profit: t.profit + r.profit, ads: t.ads + r.ads, cogs: t.cogs + (r.cogs || 0) }), { rev: 0, profit: 0, ads: 0, cogs: 0 });
     const abcSum = { A: [0, 0], B: [0, 0], C: [0, 0] };
     for (const r of rows) { abcSum[r[abcKey]][0]++; abcSum[r[abcKey]][1] += Math.max(0, v.abc === "rev" ? r.rev : r.profit); }
     const abcTotal = abcSum.A[1] + abcSum.B[1] + abcSum.C[1] || 1;
     const shown = list.slice(0, listLimit);
-    const cols = [["name", "Товар"], ["units", "Выкупы, шт"], ["rev", "Выручка"], ["profit", "Чистая прибыль"], ["margin", "Маржа"], ["drr", "ДРР"], ["abc", "ABC"]];
+    const cols = [["name", "Товар"], ["units", "Выкупы, шт"], ["rev", "Выручка"], ["profit", "Чистая прибыль"], ["margin", "Маржа"], ["roi", "Рентаб."], ["drr", "ДРР"], ["abc", "ABC"]];
     const th = cols.map(([k, l]) => `<th scope="col"><button data-act="sort" data-k="${k}" ${key === k ? `data-dir="${dir > 0 ? "↑" : "↓"}"` : ""}>${l}</button></th>`).join("");
     const fNames = { loss: "в минусе", drr: "ДРР выше порога", none: "без себестоимости", low: "маржа ниже порога", adsnosale: "реклама без выкупов" };
 
@@ -513,14 +540,17 @@
       ${demoNote()}
       <div class="head-row"><h1>Прибыль по товарам</h1>${seg("fin", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"], [90, "90 дней"]], n, "Период")}</div>
       ${storeChips()}
-      <p class="updated">По отчётам площадок за ${n === 1 ? dmy(to) + " (последний день, по которому есть отчёты)" : dm(from) + "–" + dm(to)}. ${D.stores.map((s) => `${esc(s.name)}: по ${dm(s.finTo)}`).join(" · ")}</p>
+      ${n === 1 ? dayPicker("fin", to, IX.finMin, IX.today) + noReportNote(to) : ""}
+      <p class="updated">По отчётам площадок за ${n === 1 ? dmy(to) : dm(from) + "–" + dm(to)}. ${D.stores.map((s) => `${esc(s.name)}: по ${dm(s.finTo)}`).join(" · ")}</p>
       ${!taxRate() ? `<div class="banner small">Налог не указан — прибыль без налога. <a href="#/settings">Указать</a></div>` : ""}
       <section class="totals">
         <div><div class="k">Выручка</div><div class="v">${rub(tot.rev)}</div></div>
         <div class="main"><div class="k">Чистая прибыль</div><div class="v">${rub(tot.profit)}</div></div>
-        <div><div class="k">Маржа</div><div class="v">${pct(tot.rev > 0 ? tot.profit / tot.rev : null)}</div></div>
+        <div><div class="k">Маржа</div><div class="v">${pct(tot.rev > 0 ? tot.profit / tot.rev : null)}</div><div class="s muted small">прибыль ÷ выручка</div></div>
+        <div><div class="k">Рентабельность</div><div class="v">${pct(tot.cogs > 0 ? tot.profit / tot.cogs : null)}</div><div class="s muted small">прибыль ÷ себестоимость</div></div>
         <div><div class="k">ДРР</div><div class="v">${pct(tot.rev > 0 ? tot.ads / tot.rev : null)}</div></div>
       </section>
+      ${afterTaxNote()}
       <section class="abc">
         <div class="abc-head"><h2>ABC-анализ</h2>${seg("abc", [["profit", "По прибыли"], ["rev", "По выручке"]], v.abc, "ABC")}</div>
         <div class="abc-cards">${["A", "B", "C"].map((L) => `<a class="abc-card ${L}${abcLetter === L ? " on" : ""}" href="#/profit?abc=${abcLetter === L ? "" : L}">
@@ -547,6 +577,7 @@
               <td data-l="Выручка">${rub(c.rev)}</td>
               <td data-l="Прибыль" class="${signCls(c.profit)}">${rub(c.profit)}</td>
               <td data-l="Маржа">${pct(c.margin)}</td>
+              <td data-l="Рентаб.">${pct(c.roi)}</td>
               <td data-l="ДРР">${pct(c.drr)}</td>
               <td data-l="ABC"><span class="abc-l ${c[abcKey]}">${c[abcKey]}</span></td>
             </tr>`).join("") || `<tr><td colspan="7" class="muted">За этот период продаж нет</td></tr>`}</tbody>
@@ -662,7 +693,7 @@
           ${vals.map((x) => `<li><i class="dot" style="background:${x.color}"></i><span class="ttl">${x.name}</span>
             <span class="val">${x.unit == null ? "—" : Math.round(x.unit) === 0 ? "0 ₽" : x.unit < 0 ? "+" + rub(-x.unit) : "−" + rub(x.unit)}</span><span class="how">${esc(x.how)}</span></li>`).join("")}
           <li class="result"><i></i><span class="ttl">Чистая прибыль с 1 шт</span><span class="val ${signCls(unitProfit)}">${rub(unitProfit)}</span>
-            <span class="how">Маржа ${pct(c.margin)} · за период ${rub(c.profit)}${c.shared ? ` · из расходов ${rub(c.shared)} — общие расходы магазина, поделённые по выручке` : ""}</span></li>
+            <span class="how">Маржа ${pct(c.margin)} · рентабельность ${pct(c.roi)} · за период ${rub(c.profit)}${c.shared ? ` · из расходов ${rub(c.shared)} — общие расходы магазина, поделённые по выручке` : ""}</span></li>
         </ul>
         <div class="prices">
           <div><div class="k">Минимальная цена без убытка</div><div class="v">${rub(priceFor(c, 0))}</div></div>
@@ -684,7 +715,7 @@
   const REPORT_ROWS = [
     ["rev", "Продано (выручка)", 1], ["comm", "Комиссия", -1], ["logi", "Логистика", -1], ["stor", "Хранение", -1], ["acc", "Приёмка", -1],
     ["pen", "Штрафы и удержания", -1], ["acq", "Эквайринг", -1], ["ads", "Реклама", -1], ["comp", "Компенсации", 1], ["pay", "К перечислению", 0],
-    ["cogs", "Себестоимость", -1], ["vat", "НДС", -1], ["tax", "Налог", -1], ["profit", "Чистая прибыль", 2], ["margin", "Рентабельность", 3]
+    ["cogs", "Себестоимость", -1], ["vat", "НДС", -1], ["tax", "Налог", -1], ["profit", "Чистая прибыль", 2], ["margin", "Маржа (прибыль ÷ выручка)", 3], ["roi", "Рентабельность (прибыль ÷ себестоимость)", 3]
   ];
   function periodsFor(kind, to) {
     const out = [];
@@ -717,17 +748,19 @@
       for (const [pid, a] of fin.byP) { const c = calc(pid, a); for (const k in t) t[k] += c[k] || 0; }
       for (const l of fin.leftovers) { const c = calc("*" + l.storeId, l); for (const k in t) t[k] += c[k] || 0; }
       t.margin = t.rev > 0 ? t.profit / t.rev : null;
+      t.roi = t.cogs > 0 ? t.profit / t.cogs : null;
       return { label, from, to, t };
     });
     const total = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, vat: 0, tax: 0, profit: 0 };
     for (const c of cols) for (const k in total) total[k] += c.t[k];
     total.margin = total.rev > 0 ? total.profit / total.rev : null;
+    total.roi = total.cogs > 0 ? total.profit / total.cogs : null;
     return { cols, total };
   }
   function renderReport() {
     const kind = state.view.report;
     const { cols, total } = reportData(kind);
-    const cell = (k, v) => (k === "margin" ? pct(v) : rub(v));
+    const cell = (k, v) => (k === "margin" || k === "roi" ? pct(v) : rub(v));
     app.innerHTML = `
       ${demoNote()}
       <div class="head-row"><h1>Отчёт маркетплейса</h1>${seg("report", [["day", "По дням"], ["week", "По неделям"], ["month", "По месяцам"]], kind, "Разбивка")}</div>
@@ -973,16 +1006,16 @@
   function csvProfit() {
     const { from, to } = finPeriod();
     const { rows } = profitRows();
-    const out = [["Период", "Магазин", "Площадка", "Артикул продавца", "Артикул МП", "Название", "Выкупы, шт", "Выручка, ₽", "Комиссия", "Логистика", "Хранение", "Приёмка", "Штрафы и удержания", "Эквайринг", "Компенсации", "Реклама", "Себестоимость", "НДС", "Налог", "Чистая прибыль, ₽", "Маржа, %", "ДРР, %", "ABC прибыль", "ABC выручка"]];
+    const out = [["Период", "Магазин", "Площадка", "Артикул продавца", "Артикул МП", "Название", "Выкупы, шт", "Выручка, ₽", "Комиссия", "Логистика", "Хранение", "Приёмка", "Штрафы и удержания", "Эквайринг", "Компенсации", "Реклама", "Себестоимость", "НДС", "Налог", "Чистая прибыль, ₽", "Маржа, %", "Рентабельность, %", "ДРР, %", "ABC прибыль", "ABC выручка"]];
     for (const c of rows) out.push([`${from}…${to}`, storeName(c.p.store), mpName(c.p.mp), c.p.offerId, c.p.sku, c.p.name, c.units, c.rev, c.comm, c.logi, c.stor, c.acc, c.pen, c.acq, c.comp, c.ads,
-      c.cost == null ? "" : c.cogs, c.vat, c.tax, c.profit, c.margin == null ? "" : c.margin * 100, c.drr == null ? "" : c.drr * 100, c.abc_profit, c.abc_rev]);
+      c.cost == null ? "" : c.cogs, c.vat, c.tax, c.profit, c.margin == null ? "" : c.margin * 100, c.roi == null ? "" : c.roi * 100, c.drr == null ? "" : c.drr * 100, c.abc_profit, c.abc_rev]);
     download(`unitka-pribyl-${from}-${to}.csv`, csv(out), "text/csv;charset=utf-8");
     toast("CSV скачан");
   }
   function csvReport() {
     const { cols, total } = reportData(state.view.report);
     const out = [["Показатель", ...cols.map((c) => c.label), "Весь период"]];
-    for (const [k, l] of REPORT_ROWS) out.push([l, ...cols.map((c) => (k === "margin" ? (c.t[k] == null ? "" : c.t[k] * 100) : c.t[k])), k === "margin" ? (total[k] == null ? "" : total[k] * 100) : total[k]]);
+    for (const [k, l] of REPORT_ROWS) out.push([l, ...cols.map((c) => (k === "margin" || k === "roi" ? (c.t[k] == null ? "" : c.t[k] * 100) : c.t[k])), k === "margin" || k === "roi" ? (total[k] == null ? "" : total[k] * 100) : total[k]]);
     download(`unitka-otchet-${todayIso()}.csv`, csv(out), "text/csv;charset=utf-8");
   }
 
@@ -1009,6 +1042,8 @@
       if (act === "lock") { D = null; IX = null; location.hash = "#/"; return render(); }
       if (act === "store") { state.view.stores = v; listLimit = 50; save(); const r = route(); r.q.delete("store"); location.hash = "#/" + r.parts.join("/") + (String(r.q) ? "?" + r.q : ""); return render(); }
       if (act === "home" || act === "fin") { state.view[act] = Number(v); save(); return render(); }
+      if (act === "day-set") { DAY[v] = b.dataset.day; return render(); }
+      if (act === "day-step") { const cur = app.querySelector(`input[data-day="${v}"]`); if (cur) { DAY[v] = addDays(cur.value, Number(b.dataset.step)); return render(); } }
       if (act === "abc" || act === "report") { state.view[act] = v; save(); return render(); }
       if (act === "sort") {
         const k = b.dataset.k;
@@ -1039,6 +1074,7 @@
     if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRow(tr); }
   });
   document.addEventListener("change", (e) => {
+    if (e.target.matches("input[data-day]") && e.target.value) { DAY[e.target.dataset.day] = e.target.value; return render(); }
     if (e.target.matches('[data-act="sort-select"]')) { const [k, d] = e.target.value.split(":"); state.view.profitSort = k; state.view.profitDir = Number(d); save(); render(); }
   });
   window.addEventListener("hashchange", () => { listLimit = 50; }, true);
