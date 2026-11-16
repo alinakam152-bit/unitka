@@ -27,8 +27,8 @@
     ]
   },
   "checked": {
-    "rates": "2026-11-16T12:12+05:00",
-    "news": "2026-11-16T12:12+05:00"
+    "rates": "2026-11-16T15:32+05:00",
+    "news": "2026-11-16T15:32+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -37,6 +37,12 @@
         "mp": "wb",
         "label": "Wildberries",
         "items": [
+          {
+            "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
+            "source": "Sostav.ru",
+            "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
+            "date": "2026-11-16T13:00+05:00"
+          },
           {
             "title": "Пострадавшие селлеры Wildberries из Татарстана оказались на грани банкротства",
             "source": "Реальное время",
@@ -48,12 +54,6 @@
             "source": "zakon.ru",
             "link": "https://news.google.com/rss/articles/CBMizgFBVV95cUxNN3ZDSVZlQjkySGllWVlLcm51QjR1bE1zVEN2b1VrelZ2NFRVVEI4RXJDeUNwNzRZeXRvV2JXS055V05xdEVuWEdFeDB3cFBWTDU3OFFyU2NSdmJtaHQtZFpfcEM0aHMzSXdYSUI4cmxYR0VmNlo1M3FnS0wwc3VsbTVTR3gyVjhZMmtOOGp1VDJOUUZTY0xCbE9ELVNFNmV1cThHUTk3R2lhYWRDdDdfMlBydEVHTDdIeGJTMW5IZC0zcGQ3cEptTEZXeERjUQ?oc=5",
             "date": "2026-11-15T18:57+05:00"
-          },
-          {
-            "title": "Wildberries запустил платформу по поиску сотрудников для продавцов маркетплейса",
-            "source": "Shopper’s",
-            "link": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPR0o5TE5LNGpkVU5vWE9VZkVhNHdBYnZyLUNXS3pTczAxWmNzWkpfQnpDZ3NrVlIwV1pIcUhvaUJtcEwyZl9GZnROeDFJaUg4NkFBUmVuODFULUV1a2hCSUFNdVhiSVdkcC00WXNWYkkySFVhcVREMjJGejFqSGRrdF8zeVVBb0k0bVpvMHo0SXR5UGdJc2ZPZ2o3YnF1dnRuR3lGbGxxN3RrX19aMzN4UU8wM00?oc=5",
-            "date": "2026-11-13T19:00+05:00"
           }
         ]
       },
@@ -62,16 +62,16 @@
         "label": "Ozon",
         "items": [
           {
-            "title": "Эксперты спрогнозировали подорожание товаров на Ozon из-за новой системы штрафов для продавцов",
-            "source": "Т—Ж",
-            "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE1tMUJVaUNPUlB6X3VrTUdGaV92WWZkZ0pnYXVueGNwYnFOMW1HR2h6dS1jUklFbmJIQ0tzZldnRmJCcm5SR25oYWpBV3p3Z1V1b2w4YkZCT1RFUQ?oc=5",
-            "date": "2026-11-13T14:04+05:00"
-          },
-          {
             "title": "Эксперты прогнозируют рост цен на Ozon на 3–5% из-за новых штрафов",
             "source": "Retail.ru",
             "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxNZHpPb1lKN0ppVDlBcWZNdVFPMWg5bWxyYWw3bGRQTWtBbzlDT09XLWFVanlLX0lkTlBmY21hYmNKcXpKOTRTVnh0YThfYkFqNzJ3V3FhZDNxWVd2eVlMZEY2elVOQXBOVGxDLUE3VXgzSGhGb25KeVhUYVdSeXgweE5feHN6TU5jeDBNUF9KdW9RQU45SzluNkhqSHZYSEF1dUJocndYYjRXZTJvT2dmd1A4Nk1BUVVacDJRSFln?oc=5",
             "date": "2026-11-13T13:05+05:00"
+          },
+          {
+            "title": "Власти уточнили порядок поддержки продавцов Озона и Wildberries после атак",
+            "source": "БКС Экспресс",
+            "link": "https://news.google.com/rss/articles/CBMi0AFBVV95cUxOa21GVmU3UGoteDZ1d1hpM3p2MXRqNXlraUhoelRkQmNNOVNQTk9xR1R5czJzVWFvVWowamV3OWwzUmRzVS1rbzBwd2ZBSHFrLTBfZ2RsLWZSbmVqNnpablZxSmhFV01kcDc4ZTZMMDdYZS1oZFN4YkNkTEJRMXZYOVI4WERWUmxfNUFBSFFRWjNSM2hwX2hRYzJOLUlCbWNBYWV4dlg5eEVWckVxOXJxLUVELXEtMXFIbHRmTFZKSFEybjhRcmZMaUFKTDNxbVRN?oc=5",
+            "date": "2026-11-13T05:07+05:00"
           },
           {
             "title": "Новые правила Ozon приведут к увеличению расходов продавцов и цен на маркетплейсах",
@@ -83,6 +83,6 @@
       }
     ]
   },
-  "updated_at": "2026-11-16T12:12+05:00",
+  "updated_at": "2026-11-16T15:32+05:00",
   "errors": []
 }
