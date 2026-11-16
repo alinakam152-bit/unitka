@@ -91,8 +91,8 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   // Ответ разбираем гибко: список может лежать в result.postings или прямо в result.
   const listAll = async (path, label) => {
     let cursor = "", pages = 0;
-    for (let guard = 0; guard < 300; guard++) {
-      const res = await post(path, { filter: { since, to }, limit: 1000, cursor, sort_dir: "ASC", with: { analytics_data: false, financial_data: false } });
+    for (let guard = 0; guard < 3000; guard++) { // Ozon отдаёт максимум 100 отправлений за раз
+      const res = await post(path, { filter: { since, to }, limit: 100, cursor, sort_dir: "ASC", with: { analytics_data: false, financial_data: false } });
       const r = res?.result ?? res ?? {};
       const list = Array.isArray(r) ? r : r.postings || res?.postings || [];
       list.forEach(addPosting); pages++;
