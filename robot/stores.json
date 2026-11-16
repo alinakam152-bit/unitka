@@ -1,0 +1,9 @@
+{
+  "_comment": "Магазины. Ключей здесь НЕТ: только названия переменных в «сейфе» GitHub (Secrets). Новый магазин = новая строка.",
+  "stores": [
+    { "id": "komilfo", "name": "комильфо", "mp": "wb", "token": "WB_KOMILFO_TOKEN" },
+    { "id": "foryou", "name": "for you", "mp": "ozon", "clientId": "OZON_FORYOU_CLIENT_ID", "apiKey": "OZON_FORYOU_API_KEY" },
+    { "id": "malinof", "name": "малиноф", "mp": "ozon", "clientId": "OZON_MALINOF_CLIENT_ID", "apiKey": "OZON_MALINOF_API_KEY" },
+    { "id": "mangustin", "name": "мангустин", "mp": "ozon", "clientId": "OZON_MANGUSTIN_CLIENT_ID", "apiKey": "OZON_MANGUSTIN_API_KEY" }
+  ]
+}

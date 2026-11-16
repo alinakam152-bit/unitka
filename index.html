@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Юнитка</title>
+  <meta name="theme-color" content="#E7ECF1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Юнитка">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="#/">Юнитка</a>
+    <nav class="top-nav" id="nav" hidden aria-label="Разделы">
+      <a href="#/" data-nav="home"><span class="ico" aria-hidden="true">◉</span>Главная</a>
+      <a href="#/products" data-nav="products"><span class="ico" aria-hidden="true">▤</span>Товары</a>
+      <a href="#/profit" data-nav="profit"><span class="ico" aria-hidden="true">₽</span>Прибыль</a>
+      <a href="#/report" data-nav="report"><span class="ico" aria-hidden="true">▥</span>Отчёт</a>
+      <a href="#/settings" data-nav="settings"><span class="ico" aria-hidden="true">⚙</span>Настройки</a>
+    </nav>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input type="file" id="file-json" accept=".json,application/json" hidden>
+  <input type="file" id="file-cost" accept=".csv,.xlsx,.xls,text/csv" hidden>
+
+  <script src="demo-data.js?v=5"></script>
+  <script src="app.js?v=5"></script>
+</body>
+</html>
