@@ -9,6 +9,7 @@
   const DEFAULTS = {
     costs: {},                                  // себестоимость: { артикул продавца: ₽ за 1 шт }
     tax: { rate: null, base: "revenue" },       // ставка %, база revenue | profit
+    vat: 0,                                     // НДС, %: 0 — без НДС; 5, 7, 10, 22 — ставка (НДС внутри цены)
     thresholds: { margin: 15, drr: 20 },        // принято: 15% и 20%
     view: { home: 28, fin: 28, profitSort: "profit", profitDir: -1, abc: "profit", report: "week", stores: "all" }
   };
@@ -25,11 +26,13 @@
         s.costs = cleanCosts(raw.costs);
         if (raw.tax) s.tax = { rate: raw.tax.rate == null || raw.tax.rate === "" ? null : Number(raw.tax.rate), base: raw.tax.base === "profit" ? "profit" : "revenue" };
         if (raw.thresholds) s.thresholds = { margin: num(raw.thresholds.margin, 15), drr: num(raw.thresholds.drr, 20) };
+        s.vat = cleanVat(raw.vat);
         if (raw.view) Object.assign(s.view, raw.view);
       }
     } catch (e) {}
     return s;
   }
+  function cleanVat(v) { const n = Number(v); return isFinite(n) && n > 0 && n < 100 ? n : 0; }
   function cleanCosts(o) {
     const out = {};
     for (const [k, v] of Object.entries(o || {})) { const n = Number(v); if (String(k).trim() && isFinite(n) && n >= 0) out[String(k).trim()] = n; }
@@ -125,9 +128,11 @@
     const cogs = hasCost ? cost * units : 0;
     const mpCost = COST_KEYS.reduce((t, k) => t + a[k], 0) - a.comp;
     const pre = a.rev - mpCost - a.ads - cogs;
+    // НДС сидит внутри цены: при ставке 5% это 5/105 выручки. Доходы для УСН считаются без НДС.
+    const vat = Math.max(0, a.rev) * vatShare();
     const rate = taxRate();
-    const tax = rate ? (state.tax.base === "profit" ? Math.max(0, pre) * rate : Math.max(0, a.rev) * rate) : 0;
-    const profit = pre - tax;
+    const tax = rate ? (state.tax.base === "profit" ? Math.max(0, pre - vat) * rate : Math.max(0, a.rev - vat) * rate) : 0;
+    const profit = pre - vat - tax;
     const margin = a.rev > 0 ? profit / a.rev : null;
     const drr = a.rev > 0 ? a.ads / a.rev : null;
     const flags = [];
@@ -136,8 +141,9 @@
     if (hasCost && profit >= 0 && margin != null && margin * 100 < state.thresholds.margin) flags.push("low");
     if (drr != null && drr * 100 > state.thresholds.drr) flags.push("drr");
     if (a.ads > 0 && units <= 0) flags.push("adsnosale");
-    return Object.assign({}, a, { pid, p, cost: hasCost ? cost : null, units, cogs, mpCost, tax, profit, margin, drr, flags });
+    return Object.assign({}, a, { pid, p, cost: hasCost ? cost : null, units, cogs, mpCost, vat, tax, profit, margin, drr, flags });
   }
+  function vatShare() { const v = cleanVat(state.vat); return v ? v / (100 + v) : 0; }
   function taxRate() { const r = Number(state.tax.rate); return state.tax.rate == null || !isFinite(r) || r <= 0 ? 0 : r / 100; }
 
   function stockOf(pid) { const s = D.stocks?.[pid]; return s ? s.fbo + s.fbs : null; }
@@ -322,21 +328,21 @@
 
     app.innerHTML = `
       ${demoNote()}
-      <div class="head-row"><h1>Главная</h1>${seg("home", [[7, "7 дней"], [14, "14 дней"], [28, "28 дней"]], n, "Период")}</div>
+      <div class="head-row"><h1>Главная</h1>${seg("home", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"]], n, "Период")}</div>
       ${storeChips()}
       <div class="home-grid">
         <div class="home-left">
         <section class="panel chart-panel">
           <div class="kpis">
-            <div><div class="k">Заказано</div><div class="v">${rub(c.sum - c.cs)}</div><div class="s">${int(c.qty - c.cq)} шт ${delta(c.sum - c.cs, p.sum - p.cs)} к прошлым ${n} дн.</div></div>
+            <div><div class="k">Заказано</div><div class="v">${rub(c.sum - c.cs)}</div><div class="s">${int(c.qty - c.cq)} шт ${delta(c.sum - c.cs, p.sum - p.cs)} ${n === 1 ? "к вчера" : `к прошлым ${n} дн.`}</div></div>
             <div><div class="k">Отмены</div><div class="v">${int(c.cq)} шт</div><div class="s">${pct(c.qty ? c.cq / c.qty : null)} заказов</div></div>
           </div>
-          ${ordersChart(cur.byDay, prev.byDay, from, to, n)}
-          <p class="muted small">Заказы по дням, ₽ без отмен. Пунктир — предыдущие ${n} дней. Данные на ${dm(IX.today)}.</p>
+          ${n === 1 ? ordersChart(aggOrders(addDays(to, -13), to).byDay, null, addDays(to, -13), to, 14) : ordersChart(cur.byDay, prev.byDay, from, to, n)}
+          <p class="muted small">${n === 1 ? `Цифры выше — за ${dmy(to)} (сегодня, день ещё не закончился) в сравнении со вчера. График — последние 14 дней` : `Заказы по дням, ₽ без отмен. Пунктир — предыдущие ${n} дней`}. Данные на ${dm(IX.today)}.</p>
         </section>
         <section class="panel fin-mini">
           <h2>Деньги по отчётам площадок</h2>
-          <p class="muted small">${dm(fFrom)}–${dm(fTo)} · отчёты WB приходят раз в неделю, поэтому период заканчивается ${dm(fTo)}</p>
+          <p class="muted small">${n === 1 ? dmy(fTo) : dm(fFrom) + "–" + dm(fTo)} · отчёты WB приходят раз в неделю, поэтому период заканчивается ${dm(fTo)}</p>
           <div class="kpis four">
             <div><div class="k">Выручка</div><div class="v">${rub(fs.rev)}</div><div class="s">${int(fs.units)} шт выкуплено</div></div>
             <div class="main"><div class="k">Чистая прибыль</div><div class="v ${signCls(fs.profit)}">${rub(fs.profit)}</div></div>
@@ -358,7 +364,7 @@
   function ordersChart(byDay, prevDay, from, to, n) {
     const days = []; for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
     const vals = days.map((d) => { const x = byDay.get(d); return x ? x.sum - x.cs : 0; });
-    const pvals = days.map((d) => { const x = prevDay.get(addDays(d, -n)); return x ? x.sum - x.cs : 0; });
+    const pvals = prevDay ? days.map((d) => { const x = prevDay.get(addDays(d, -n)); return x ? x.sum - x.cs : 0; }) : [];
     const max = Math.max(1, ...vals, ...pvals);
     const W = Math.max(300, Math.min(900, (app.clientWidth || 600) - 64)), H = 190, padB = 22;
     const x = (i) => (days.length < 2 ? W / 2 : (i / (days.length - 1)) * W);
@@ -371,7 +377,7 @@
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Заказы по дням: максимум ${rub(vals[best])} ${dm(days[best])}">
       <line x1="0" x2="${W}" y1="${y(max)}" y2="${y(max)}" class="grid"/><line x1="0" x2="${W}" y1="${y(max / 2)}" y2="${y(max / 2)}" class="grid"/>
       <text x="${W}" y="${y(max) - 3}" text-anchor="end">${rub(max)}</text>
-      <path d="${area}" class="area"/><path d="${line(pvals)}" class="prev"/><path d="${line(vals)}" class="cur"/>${ticks}</svg>`;
+      <path d="${area}" class="area"/>${pvals.length ? `<path d="${line(pvals)}" class="prev"/>` : ""}<path d="${line(vals)}" class="cur"/>${ticks}</svg>`;
   }
 
   function attentionList() {
@@ -505,9 +511,9 @@
 
     app.innerHTML = `
       ${demoNote()}
-      <div class="head-row"><h1>Прибыль по товарам</h1>${seg("fin", [[7, "7 дней"], [14, "14 дней"], [28, "28 дней"], [90, "90 дней"]], n, "Период")}</div>
+      <div class="head-row"><h1>Прибыль по товарам</h1>${seg("fin", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"], [90, "90 дней"]], n, "Период")}</div>
       ${storeChips()}
-      <p class="updated">По отчётам площадок за ${dm(from)}–${dm(to)}. ${D.stores.map((s) => `${esc(s.name)}: по ${dm(s.finTo)}`).join(" · ")}</p>
+      <p class="updated">По отчётам площадок за ${n === 1 ? dmy(to) + " (последний день, по которому есть отчёты)" : dm(from) + "–" + dm(to)}. ${D.stores.map((s) => `${esc(s.name)}: по ${dm(s.finTo)}`).join(" · ")}</p>
       ${!taxRate() ? `<div class="banner small">Налог не указан — прибыль без налога. <a href="#/settings">Указать</a></div>` : ""}
       <section class="totals">
         <div><div class="k">Выручка</div><div class="v">${rub(tot.rev)}</div></div>
@@ -560,6 +566,7 @@
     ["acq", "Эквайринг", "Оплата картой", "var(--s6)"],
     ["ads", "Реклама", { wb: "WB «Продвижение»: статистика кампаний по артикулу", ozon: "Начисления Ozon: продвижение и оплата за клик (общая часть делится по выручке)" }, "var(--s7)"],
     ["cogs", "Себестоимость", "Из настроек", "var(--s8)"],
+    ["vat", "НДС", "Из настроек", "var(--drr)"],
     ["tax", "Налог", "Из настроек", "var(--s9)"]
   ];
   function renderItem(parts) {
@@ -604,12 +611,12 @@
     return { q, price, pctPart, fixed };
   }
   function priceFor(c, margin) {
-    const m = unitModel(c), t = taxRate();
+    const m = unitModel(c), t = taxRate(), v = vatShare();
     if (state.tax.base === "profit") {
-      if (margin === 0) { const den = 1 - m.pctPart; return den > 0 ? m.fixed / den : null; }
-      const den = (1 - m.pctPart) * (1 - t) - margin; return den > 0 ? (m.fixed * (1 - t)) / den : null;
+      if (margin === 0) { const den = 1 - m.pctPart - v; return den > 0 ? m.fixed / den : null; }
+      const den = (1 - m.pctPart - v) * (1 - t) - margin; return den > 0 ? (m.fixed * (1 - t)) / den : null;
     }
-    const den = 1 - m.pctPart - t - margin; return den > 0 ? m.fixed / den : null;
+    const den = 1 - m.pctPart - v - t * (1 - v) - margin; return den > 0 ? m.fixed / den : null;
   }
   function whatIf(c, newPrice, newAds) {
     const m = unitModel(c);
@@ -617,8 +624,9 @@
     const nonAd = c.logi + c.stor + c.acc + c.pen - c.comp + (c.cost || 0) * m.q;
     const pre = revenue * (1 - m.pctPart) - nonAd - newAds;
     const t = taxRate();
-    const tax = t ? (state.tax.base === "profit" ? Math.max(0, pre) * t : revenue * t) : 0;
-    const profit = pre - tax;
+    const vat = Math.max(0, revenue) * vatShare();
+    const tax = t ? (state.tax.base === "profit" ? Math.max(0, pre - vat) * t : Math.max(0, revenue - vat) * t) : 0;
+    const profit = pre - vat - tax;
     return { profit, margin: revenue ? profit / revenue : 0, drr: revenue ? newAds / revenue : 0 };
   }
   function itemPanel(p, c, o) {
@@ -633,9 +641,10 @@
       let v = c[f], how = `${src}. ${rub(v)} за период ÷ ${int(q)} шт`;
       if (f === "pen" && c.comp) { v = c.pen - c.comp; how += `; компенсации ${rub(c.comp)} вычтены`; }
       if (f === "cogs") { v = c.cost == null ? null : c.cogs; how = c.cost == null ? "Не указана — прибыль завышена" : `${rub(c.cost)} за 1 шт, из настроек`; }
-      if (f === "tax") how = taxRate() ? `${state.tax.rate}% ${state.tax.base === "profit" ? "от «доходы минус расходы»" : "от выручки"}` : "Не указан в настройках";
+      if (f === "vat") how = vatShare() ? `${state.vat}% внутри цены: выручка × ${state.vat}/${100 + state.vat}` : "Без НДС (меняется в настройках)";
+      if (f === "tax") how = taxRate() ? `${state.tax.rate}% ${state.tax.base === "profit" ? "от «доходы минус расходы»" : "от выручки"}${vatShare() ? " без НДС" : ""}` : "Не указан в настройках";
       return { f, name, how, color, unit: v == null ? null : v / q };
-    });
+    }).filter((x) => x.f !== "vat" || vatShare());
     const spent = vals.reduce((s, x) => s + Math.max(0, x.unit || 0), 0);
     const unitProfit = c.profit / q;
     const scale = Math.max(price, spent) || 1;
@@ -675,11 +684,14 @@
   const REPORT_ROWS = [
     ["rev", "Продано (выручка)", 1], ["comm", "Комиссия", -1], ["logi", "Логистика", -1], ["stor", "Хранение", -1], ["acc", "Приёмка", -1],
     ["pen", "Штрафы и удержания", -1], ["acq", "Эквайринг", -1], ["ads", "Реклама", -1], ["comp", "Компенсации", 1], ["pay", "К перечислению", 0],
-    ["cogs", "Себестоимость", -1], ["tax", "Налог", -1], ["profit", "Чистая прибыль", 2], ["margin", "Рентабельность", 3]
+    ["cogs", "Себестоимость", -1], ["vat", "НДС", -1], ["tax", "Налог", -1], ["profit", "Чистая прибыль", 2], ["margin", "Рентабельность", 3]
   ];
   function periodsFor(kind, to) {
     const out = [];
-    if (kind === "week") {
+    if (kind === "day") {
+      // последние 14 дней, по одному дню в столбце
+      for (let i = 13; i >= 0; i--) { const d = addDays(to, -i); out.push([d, d, dm(d)]); }
+    } else if (kind === "week") {
       // недели пн–вс, последние 8
       const d = new Date(to + "T00:00:00Z"); const dow = (d.getUTCDay() + 6) % 7;
       let end = addDays(to, 6 - dow > 0 && dow !== 6 ? -dow - 1 : 0);
@@ -701,13 +713,13 @@
     const per = periodsFor(kind, IX.finToMax);
     const cols = per.map(([from, to, label]) => {
       const fin = aggFin(from, to, { allocate: false });
-      const t = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, tax: 0, profit: 0 };
+      const t = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, vat: 0, tax: 0, profit: 0 };
       for (const [pid, a] of fin.byP) { const c = calc(pid, a); for (const k in t) t[k] += c[k] || 0; }
       for (const l of fin.leftovers) { const c = calc("*" + l.storeId, l); for (const k in t) t[k] += c[k] || 0; }
       t.margin = t.rev > 0 ? t.profit / t.rev : null;
       return { label, from, to, t };
     });
-    const total = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, tax: 0, profit: 0 };
+    const total = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, vat: 0, tax: 0, profit: 0 };
     for (const c of cols) for (const k in total) total[k] += c.t[k];
     total.margin = total.rev > 0 ? total.profit / total.rev : null;
     return { cols, total };
@@ -718,7 +730,7 @@
     const cell = (k, v) => (k === "margin" ? pct(v) : rub(v));
     app.innerHTML = `
       ${demoNote()}
-      <div class="head-row"><h1>Отчёт маркетплейса</h1>${seg("report", [["week", "По неделям"], ["month", "По месяцам"]], kind, "Разбивка")}</div>
+      <div class="head-row"><h1>Отчёт маркетплейса</h1>${seg("report", [["day", "По дням"], ["week", "По неделям"], ["month", "По месяцам"]], kind, "Разбивка")}</div>
       ${storeChips()}
       <p class="updated">Данные отчётов: ${D.stores.map((s) => `${esc(s.name)} по ${dm(s.finTo)}`).join(" · ")}. Последний столбец может быть неполным.</p>
       <div class="report-chart">${reportBars(cols)}</div>
@@ -729,7 +741,7 @@
           <tbody>${REPORT_ROWS.map(([k, l, s]) => `<tr class="${s >= 2 ? "strong" : s === 0 ? "sub" : ""}"><th scope="row">${l}</th>${cols.map((c) => `<td class="${k === "profit" ? signCls(c.t[k]) : ""}">${cell(k, c.t[k])}</td>`).join("")}<td class="${k === "profit" ? signCls(total[k]) : ""}"><b>${cell(k, total[k])}</b></td></tr>`).join("")}</tbody>
         </table>
       </div>
-      <p class="muted small">Расходы показаны положительными числами. Себестоимость = выкупы минус возвраты × себестоимость из настроек. «К перечислению» — что площадка перечисляет вам до себестоимости и налога.</p>`;
+      <p class="muted small">Расходы показаны положительными числами. Себестоимость = выкупы минус возвраты × себестоимость из настроек. «К перечислению» — что площадка перечисляет вам до себестоимости, НДС и налога.</p>`;
   }
   function reportBars(cols) {
     const max = Math.max(1, ...cols.map((c) => c.t.rev));
@@ -794,6 +806,11 @@
               <option value="revenue" ${t.base === "revenue" ? "selected" : ""}>От выручки</option>
               <option value="profit" ${t.base === "profit" ? "selected" : ""}>Доходы минус расходы</option></select></div>
           </div>
+          <div class="form-row">
+            <div class="field"><label for="vat-rate">НДС</label><select id="vat-rate">
+              ${[[0, "Без НДС"], [5, "5 %"], [7, "7 %"], [10, "10 %"], [22, "22 %"]].map(([v, l]) => `<option value="${v}" ${cleanVat(state.vat) === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+          </div>
+          <p class="muted small">НДС считается внутри цены: при 5% это 5/105 выручки (≈4,76%). Налог УСН с ним считается от выручки без НДС.</p>
         </section>
         <section class="panel">
           <h2>Пороги подсветки</h2>
@@ -824,6 +841,7 @@
     const num = (id) => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
     app.querySelector("#tax-rate").addEventListener("input", () => { state.tax.rate = num("tax-rate"); save(); });
     app.querySelector("#tax-base").addEventListener("change", (e) => { state.tax.base = e.target.value; save(); toast("База налога сохранена"); });
+    app.querySelector("#vat-rate").addEventListener("change", (e) => { state.vat = cleanVat(e.target.value); save(); toast(state.vat ? `НДС ${state.vat}% сохранён` : "Без НДС"); });
     app.querySelector("#th-margin").addEventListener("input", () => { const v = num("th-margin"); if (v != null) { state.thresholds.margin = v; save(); } });
     app.querySelector("#th-drr").addEventListener("input", () => { const v = num("th-drr"); if (v != null) { state.thresholds.drr = v; save(); } });
     app.querySelectorAll("[data-cost]").forEach((inp) => inp.addEventListener("change", () => {
@@ -927,17 +945,18 @@
   // ================= Копия настроек =================
   function exportJson() {
     download(`unitka-kopiya-${todayIso()}.json`, JSON.stringify({ app: "unitka", version: 2, savedAt: new Date().toISOString(),
-      settings: { costs: state.costs, tax: state.tax, thresholds: state.thresholds } }, null, 2), "application/json");
+      settings: { costs: state.costs, tax: state.tax, vat: state.vat, thresholds: state.thresholds } }, null, 2), "application/json");
     toast("Копия данных скачана");
   }
   function importJson(text) {
     let d; try { d = JSON.parse(text); } catch (e) { toast("Это не файл копии Юнитки"); return; }
     if (!d || d.app !== "unitka" || !d.settings) { toast("Это не файл копии Юнитки"); return; }
-    if (!confirm("Заменить текущие себестоимость, налог и пороги данными из файла?")) return;
+    if (!confirm("Заменить текущие себестоимость, налог, НДС и пороги данными из файла?")) return;
     const s = d.settings;
     state.costs = cleanCosts(s.costs);
     if (s.tax) state.tax = { rate: s.tax.rate == null || s.tax.rate === "" ? null : Number(s.tax.rate), base: s.tax.base === "profit" ? "profit" : "revenue" };
     if (s.thresholds) state.thresholds = { margin: num(s.thresholds.margin, 15), drr: num(s.thresholds.drr, 20) };
+    state.vat = cleanVat(s.vat);
     save(); render(); toast("Копия загружена");
   }
 
@@ -954,9 +973,9 @@
   function csvProfit() {
     const { from, to } = finPeriod();
     const { rows } = profitRows();
-    const out = [["Период", "Магазин", "Площадка", "Артикул продавца", "Артикул МП", "Название", "Выкупы, шт", "Выручка, ₽", "Комиссия", "Логистика", "Хранение", "Приёмка", "Штрафы и удержания", "Эквайринг", "Компенсации", "Реклама", "Себестоимость", "Налог", "Чистая прибыль, ₽", "Маржа, %", "ДРР, %", "ABC прибыль", "ABC выручка"]];
+    const out = [["Период", "Магазин", "Площадка", "Артикул продавца", "Артикул МП", "Название", "Выкупы, шт", "Выручка, ₽", "Комиссия", "Логистика", "Хранение", "Приёмка", "Штрафы и удержания", "Эквайринг", "Компенсации", "Реклама", "Себестоимость", "НДС", "Налог", "Чистая прибыль, ₽", "Маржа, %", "ДРР, %", "ABC прибыль", "ABC выручка"]];
     for (const c of rows) out.push([`${from}…${to}`, storeName(c.p.store), mpName(c.p.mp), c.p.offerId, c.p.sku, c.p.name, c.units, c.rev, c.comm, c.logi, c.stor, c.acc, c.pen, c.acq, c.comp, c.ads,
-      c.cost == null ? "" : c.cogs, c.tax, c.profit, c.margin == null ? "" : c.margin * 100, c.drr == null ? "" : c.drr * 100, c.abc_profit, c.abc_rev]);
+      c.cost == null ? "" : c.cogs, c.vat, c.tax, c.profit, c.margin == null ? "" : c.margin * 100, c.drr == null ? "" : c.drr * 100, c.abc_profit, c.abc_rev]);
     download(`unitka-pribyl-${from}-${to}.csv`, csv(out), "text/csv;charset=utf-8");
     toast("CSV скачан");
   }
