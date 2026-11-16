@@ -37,11 +37,25 @@
 
   <script src="demo-data.js?v=6"></script>
   <script src="app.js?v=6"></script>
+  <p id="pwa-status" class="pwa-status" aria-live="polite"></p>
+  <style>
+    .pwa-status { margin: 24px 16px calc(16px + env(safe-area-inset-bottom)); text-align: center; font-size: .8rem; color: var(--ink-2); }
+    @media (max-width: 720px) { .pwa-status { margin-bottom: calc(88px + env(safe-area-inset-bottom)); } }
+  </style>
   <script>
-    // Работа без интернета (service worker, файл sw.js)
-    if ("serviceWorker" in navigator) {
-      addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
-    }
+    // Работа без интернета (service worker, файл sw.js) — включаем сразу, не ждём шрифты
+    (function () {
+      const out = document.getElementById("pwa-status");
+      const say = (t) => { out.textContent = t; };
+      if (!("serviceWorker" in navigator)) { say("Без интернета: этот браузер не умеет"); return; }
+      say("Без интернета: готовлю… не закрывайте пару секунд");
+      navigator.serviceWorker.register("sw.js").catch((e) => say("Без интернета: ошибка — " + e.message));
+      navigator.serviceWorker.ready.then(async () => {
+        const key = (await caches.keys()).find((k) => k.startsWith("unitka-")) || "?";
+        const ok = await caches.match("index.html");
+        say(ok ? "✓ Работает без интернета (" + key.replace("unitka-", "") + ")" : "Без интернета: файлы ещё не сохранены");
+      });
+    })();
   </script>
 </body>
 </html>

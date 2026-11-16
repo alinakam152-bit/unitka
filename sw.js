@@ -1,7 +1,7 @@
 /* Юнитка — service worker: приложение открывается без интернета.
    ВАЖНО: при КАЖДОЙ выкладке повышай VERSION (v1 → v2 → v3 ...),
    иначе телефон будет показывать старую версию. */
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = "unitka-" + VERSION;
 
 // Файлы приложения — ровно так, как они подключены в index.html
@@ -40,7 +40,7 @@ self.addEventListener("fetch", (e) => {
   if (req.mode === "navigate") {
     e.respondWith(
       fetch(req).then((res) => { putCopy("index.html", res); return res; })
-        .catch(() => caches.match("index.html"))
+        .catch(() => caches.match("index.html").then((r) => r || caches.match("./")))
     );
     return;
   }
