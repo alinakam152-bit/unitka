@@ -216,7 +216,8 @@
         <p class="muted">Цифры магазинов лежат в зашифрованном файле. Введите фразу-расшифровку — она есть только у вас.</p>
         <form id="lock-form" autocomplete="off">
           <div class="field"><label for="phrase">Фраза</label>
-            <input id="phrase" type="password" autocomplete="current-password" required minlength="4" placeholder="4–5 слов через пробел"></div>
+            <input id="phrase" class="secret" type="text" lang="ru" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required minlength="4" placeholder="4–5 слов через пробел"></div>
+          <label class="check"><input type="checkbox" id="show-phrase"> Показать фразу</label>
           <label class="check"><input type="checkbox" id="remember" checked> Запомнить на этом устройстве</label>
           <p class="err" role="alert">${esc(lockMsg)}</p>
           <button class="btn primary wide" type="submit">Открыть</button>
@@ -227,6 +228,11 @@
           <button class="btn" data-act="demo">Открыть на выдуманных товарах</button>
         </div>
       </section>`;
+    // Поле обычное текстовое (не «пароль»): в поле пароля iPhone и Android дают только латиницу.
+    // Точки вместо букв рисует CSS-класс .secret; галочка «Показать фразу» его снимает.
+    app.querySelector("#show-phrase").addEventListener("change", (e) => {
+      app.querySelector("#phrase").classList.toggle("secret", !e.target.checked);
+    });
     app.querySelector("#lock-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const phrase = app.querySelector("#phrase").value.trim();

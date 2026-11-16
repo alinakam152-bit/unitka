@@ -394,3 +394,6 @@ table.report { border-collapse: collapse; width: 100%; min-width: 720px; }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
   .lock { margin: 4vh auto; }
 }
+
+/* Фраза скрыта точками, но клавиатура остаётся любой (в т.ч. русской) */
+.secret { -webkit-text-security: disc; text-security: disc; }
