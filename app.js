@@ -11,7 +11,7 @@
     tax: { rate: null, base: "revenue" },       // ставка %, база revenue | profit
     vat: 0,                                     // НДС, %: 0 — без НДС; 5, 7, 10, 22 — ставка (НДС внутри цены)
     thresholds: { margin: 15, drr: 20 },        // принято: 15% и 20%
-    internal: 0,                                // внутренние расходы, ₽ на 1 шт (упаковка, фулфилмент…)
+    internal: 0,                                // свои расходы, ₽ на 1 шт (упаковка, фулфилмент…)
     view: { home: 28, fin: 28, ord: 1, ordScheme: "all", ordUnit: "rub", profitSort: "profit", profitDir: -1, abc: "profit", report: "week", stores: "all" }
   };
   const ls = {
@@ -62,8 +62,8 @@
   }
 
   // ================= Данные =================
-  const F = { date: 0, pid: 1, rev: 2, sold: 3, ret: 4, comm: 5, logi: 6, stor: 7, acc: 8, pen: 9, acq: 10, ads: 11, comp: 12, pay: 13 };
-  const COST_KEYS = ["comm", "logi", "stor", "acc", "pen", "acq"];
+  const F = { date: 0, pid: 1, rev: 2, sold: 3, ret: 4, comm: 5, logi: 6, stor: 7, acc: 8, pen: 9, acq: 10, ads: 11, comp: 12, pay: 13, serviceLogi: 14 };
+  const COST_KEYS = ["comm", "logi", "stor", "acc", "pen", "acq", "serviceLogi"];
   let D = null;           // расшифрованные данные
   const DAY = { home: null, fin: null, ord: null }; // выбранный в календаре день (режим «1 день»); null — по умолчанию
   let IX = null;          // индексы
@@ -100,12 +100,12 @@
   // пропорционально выручке за этот же период (принято, как в брифе).
   function aggFin(from, to, { allocate = true } = {}) {
     const byP = new Map(), storeLevel = new Map();
-    const blank = () => ({ rev: 0, sold: 0, ret: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, shared: 0 });
+    const blank = () => ({ rev: 0, sold: 0, ret: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, serviceLogi: 0, shared: 0 });
     for (const r of D.fin) {
       if (r[0] < from || r[0] > to || !storeOk(r[1])) continue;
       const target = r[1][0] === "*" ? storeLevel : byP;
       const a = target.get(r[1]) || blank();
-      for (const k in F) if (k !== "date" && k !== "pid") a[k] += r[F[k]];
+      for (const k in F) if (k !== "date" && k !== "pid") a[k] += r[F[k]] || 0;
       target.set(r[1], a);
     }
     const leftovers = [];
@@ -116,7 +116,7 @@
       if (!allocate || rev <= 0) { leftovers.push({ storeId, ...s }); continue; }
       for (const [, a] of items) {
         const share = Math.max(0, a.rev) / rev;
-        for (const k of ["comm", "logi", "stor", "acc", "pen", "acq", "ads", "comp", "pay", "rev"]) {
+        for (const k of ["comm", "logi", "stor", "acc", "pen", "acq", "ads", "comp", "pay", "rev", "serviceLogi"]) {
           const add = s[k] * share; a[k] += add;
           if (k !== "pay" && k !== "rev" && k !== "comp") a.shared += add;
         }
@@ -125,6 +125,8 @@
     return { byP, leftovers };
   }
 
+  const internalFromReport = (a) => a.stor + a.acc + a.pen + a.acq + a.serviceLogi;
+
   // Прибыль по одной строке (товар за период)
   function calc(pid, a) {
     const p = IX.prod.get(pid) || { pid, name: pid, offerId: "", store: storeOf(pid), mp: "" };
@@ -132,9 +134,9 @@
     const hasCost = typeof cost === "number";
     const units = a.sold - a.ret;
     const cogs = hasCost ? cost * units : 0;
-    const internal = pid[0] === "*" ? 0 : cleanMoney(state.internal) * units; // свои расходы на 1 шт × выкуплено
+    const ownCosts = pid[0] === "*" ? 0 : cleanMoney(state.internal) * units; // свои расходы на 1 шт × выкуплено
     const mpCost = COST_KEYS.reduce((t, k) => t + a[k], 0) - a.comp;
-    const pre = a.rev - mpCost - a.ads - cogs - internal;
+    const pre = a.rev - mpCost - a.ads - cogs - ownCosts;
     // НДС сидит внутри цены: при ставке 5% это 5/105 выручки. Доходы для УСН считаются без НДС.
     const vat = Math.max(0, a.rev) * vatShare();
     const rate = taxRate();
@@ -149,7 +151,7 @@
     if (hasCost && profit >= 0 && margin != null && margin * 100 < state.thresholds.margin) flags.push("low");
     if (drr != null && drr * 100 > state.thresholds.drr) flags.push("drr");
     if (a.ads > 0 && units <= 0) flags.push("adsnosale");
-    return Object.assign({}, a, { pid, p, cost: hasCost ? cost : null, units, cogs, internal, mpCost, vat, tax, profit, margin, roi, drr, flags });
+    return Object.assign({}, a, { pid, p, cost: hasCost ? cost : null, units, cogs, internal: internalFromReport(a), ownCosts, mpCost, vat, tax, profit, margin, roi, drr, flags });
   }
   function vatShare() { const v = cleanVat(state.vat); return v ? v / (100 + v) : 0; }
   function taxRate() { const r = Number(state.tax.rate); return state.tax.rate == null || !isFinite(r) || r <= 0 ? 0 : r / 100; }
@@ -332,9 +334,9 @@
   }
   const clampDay = (d, min, max) => (d < min ? min : d > max ? max : d);
   // Какие магазины ещё не прислали отчёт за этот день (WB — раз в неделю)
-  function noReportNote(day) {
+  function noReportNote(day, orders = false) {
     const late = D.stores.filter((st) => (state.view.stores === "all" || state.view.stores === st.id) && (!st.finTo || st.finTo < day));
-    return late.length ? `<p class="banner small">Отчётов за ${dmy(day)} пока нет: ${late.map((st) => `${esc(st.name)} (отчёты по ${dm(st.finTo)})`).join(", ")}. Их цифры за этот день не вошли.</p>` : "";
+    return late.length ? `<p class="banner small">Отчётов за ${dmy(day)} пока нет: ${late.map((st) => `${esc(st.name)} (отчёты по ${dm(st.finTo)})`).join(", ")}. ${orders ? "Расходы из этих отчётов за день ещё не вошли." : "Их цифры за этот день не вошли."}</p>` : "";
   }
   const afterTaxNote = () => (taxRate() || vatShare() ? `<p class="muted small">Рентабельность и ROI посчитаны от прибыли после ${[vatShare() ? `НДС ${state.vat}%` : "", taxRate() ? `налога ${state.tax.rate}%` : ""].filter(Boolean).join(" и ")}.</p>` : "");
 
@@ -538,7 +540,7 @@
     const abcTotal = abcSum.A[1] + abcSum.B[1] + abcSum.C[1] || 1;
     const shown = list.slice(0, listLimit);
     const cols = [["name", "Товар"], ["units", "Выкупы, шт"], ["rev", "Выручка"], ["profit", "Чистая прибыль"], ["margin", "Рентаб."], ["roi", "ROI"], ["drr", "ДРР"], ["abc", "ABC"]];
-    const th = cols.map(([k, l]) => `<th scope="col"><button data-act="sort" data-k="${k}" ${key === k ? `data-dir="${dir > 0 ? "↑" : "↓"}"` : ""}>${l}</button></th>`).join("");
+    const th = cols.map(([k, l]) => `<th scope="col"><button data-act="sort" data-k="${k}" ${key === k ? `data-dir="${dir > 0 ? "↑" : "↓"}"` : ""}>${l}</button> ${metricHelp(k, l)}</th>`).join("");
     const fNames = { loss: "в минусе", drr: "ДРР выше порога", none: "без себестоимости", low: "рентабельность ниже порога", adsnosale: "реклама без выкупов" };
 
     app.innerHTML = `
@@ -547,13 +549,14 @@
       ${storeChips()}
       ${n === 1 ? dayPicker("fin", to, IX.finMin, IX.today) + noReportNote(to) : ""}
       <p class="updated">По отчётам площадок за ${n === 1 ? dmy(to) : dm(from) + "–" + dm(to)}. ${D.stores.map((s) => `${esc(s.name)}: по ${dm(s.finTo)}`).join(" · ")}</p>
+      ${n !== 1 ? noReportNote(to) : ""}
       ${!taxRate() ? `<div class="banner small">Налог не указан — прибыль без налога. <a href="#/settings">Указать</a></div>` : ""}
       <section class="totals">
-        <div><div class="k">Выручка</div><div class="v">${rub(tot.rev)}</div></div>
-        <div class="main"><div class="k">Чистая прибыль</div><div class="v">${rub(tot.profit)}</div></div>
-        <div><div class="k">Рентабельность</div><div class="v">${pct(tot.rev > 0 ? tot.profit / tot.rev : null)}</div><div class="s muted small">прибыль ÷ выручка</div></div>
-        <div><div class="k">ROI</div><div class="v">${pct(tot.cogs > 0 ? tot.profit / tot.cogs : null)}</div><div class="s muted small">прибыль ÷ себестоимость</div></div>
-        <div><div class="k">ДРР</div><div class="v">${pct(tot.rev > 0 ? tot.ads / tot.rev : null)}</div></div>
+        <div><div class="k">Выручка ${metricHelp("rev", "Выручка")}</div><div class="v">${rub(tot.rev)}</div></div>
+        <div class="main"><div class="k">Чистая прибыль ${metricHelp("profit", "Чистая прибыль")}</div><div class="v">${rub(tot.profit)}</div></div>
+        <div><div class="k">Рентабельность ${metricHelp("margin", "Рентабельность")}</div><div class="v">${pct(tot.rev > 0 ? tot.profit / tot.rev : null)}</div><div class="s muted small">прибыль ÷ выручка</div></div>
+        <div><div class="k">ROI ${metricHelp("roi", "ROI")}</div><div class="v">${pct(tot.cogs > 0 ? tot.profit / tot.cogs : null)}</div><div class="s muted small">прибыль ÷ себестоимость</div></div>
+        <div><div class="k">ДРР ${metricHelp("drr", "ДРР")}</div><div class="v">${pct(tot.rev > 0 ? tot.ads / tot.rev : null)}</div></div>
       </section>
       ${afterTaxNote()}
       <section class="abc">
@@ -596,13 +599,10 @@
   const LINES = [
     ["comm", "Комиссия", { wb: "Отчёт о реализации: цена − «к перечислению» − эквайринг", ozon: "Начисления: «Вознаграждение за продажу»" }, "var(--s1)"],
     ["logi", "Логистика", { wb: "«Услуги по доставке» и возмещение перевозки", ozon: "Логистика, обратная логистика, выдача, обработка" }, "var(--s2)"],
-    ["stor", "Хранение", "Платное хранение (общая сумма магазина делится по выручке, принято)", "var(--s3)"],
-    ["acc", "Приёмка", "Платная приёмка / обработка поставки", "var(--s4)"],
-    ["pen", "Штрафы и удержания", "Штрафы, удержания, подписки и прочие услуги", "var(--s5)"],
-    ["acq", "Эквайринг", "Оплата картой", "var(--s6)"],
     ["ads", "Реклама", { wb: "WB «Продвижение»: статистика кампаний по артикулу", ozon: "Начисления Ozon: продвижение и оплата за клик (общая часть делится по выручке)" }, "var(--s7)"],
     ["cogs", "Себестоимость", "Из настроек", "var(--s8)"],
-    ["internal", "Внутренние расходы", "Из настроек", "var(--none)"],
+    ["internal", "Внутренние расходы", "Услуги и удержания из отчётов площадки", "var(--s3)"],
+    ["ownCosts", "Свои расходы", "Из настроек", "var(--none)"],
     ["vat", "НДС", "Из настроек", "var(--drr)"],
     ["tax", "Налог", "Из настроек", "var(--s9)"]
   ];
@@ -644,7 +644,7 @@
     const q = c.units > 0 ? c.units : 1;
     const price = c.rev / q;
     const pctPart = c.rev > 0 ? (c.comm + c.acq) / c.rev : 0;
-    const fixed = (c.logi + c.stor + c.acc + c.pen - c.comp + c.ads) / q + (c.cost || 0) + cleanMoney(state.internal);
+    const fixed = (c.logi + c.internal - c.acq - c.comp + c.ads) / q + (c.cost || 0) + cleanMoney(state.internal);
     return { q, price, pctPart, fixed };
   }
   function priceFor(c, margin) {
@@ -658,7 +658,7 @@
   function whatIf(c, newPrice, newAds) {
     const m = unitModel(c);
     const revenue = newPrice * m.q;
-    const nonAd = c.logi + c.stor + c.acc + c.pen - c.comp + ((c.cost || 0) + cleanMoney(state.internal)) * m.q;
+    const nonAd = c.logi + c.internal - c.acq - c.comp + ((c.cost || 0) + cleanMoney(state.internal)) * m.q;
     const pre = revenue * (1 - m.pctPart) - nonAd - newAds;
     const t = taxRate();
     const vat = Math.max(0, revenue) * vatShare();
@@ -676,13 +676,13 @@
     const vals = LINES.map(([f, name, src, color]) => {
       if (typeof src === "object") src = src[p.mp] || "";
       let v = c[f], how = `${src}. ${rub(v)} за период ÷ ${int(q)} шт`;
-      if (f === "pen" && c.comp) { v = c.pen - c.comp; how += `; компенсации ${rub(c.comp)} вычтены`; }
+      if (f === "internal" && c.comp) { v = c.internal - c.comp; how += `; компенсации ${rub(c.comp)} вычтены`; }
       if (f === "cogs") { v = c.cost == null ? null : c.cogs; how = c.cost == null ? "Не указана — прибыль завышена" : `${rub(c.cost)} за 1 шт, из настроек`; }
       if (f === "vat") how = vatShare() ? `${state.vat}% внутри цены: выручка × ${state.vat}/${100 + state.vat}` : "Без НДС (меняется в настройках)";
-      if (f === "internal") how = cleanMoney(state.internal) ? `${rub2(state.internal)} на 1 шт, из настроек (упаковка, фулфилмент…)` : "Не указаны в настройках";
+      if (f === "ownCosts") how = cleanMoney(state.internal) ? `${rub2(state.internal)} на 1 шт, из настроек (упаковка, фулфилмент…)` : "Не указаны в настройках";
       if (f === "tax") how = taxRate() ? `${state.tax.rate}% ${state.tax.base === "profit" ? "от «доходы минус расходы»" : "от выручки"}${vatShare() ? " без НДС" : ""}` : "Не указан в настройках";
       return { f, name, how, color, unit: v == null ? null : v / q };
-    }).filter((x) => (x.f !== "vat" || vatShare()) && (x.f !== "internal" || cleanMoney(state.internal)));
+    }).filter((x) => (x.f !== "vat" || vatShare()) && (x.f !== "ownCosts" || cleanMoney(state.internal)));
     const spent = vals.reduce((s, x) => s + Math.max(0, x.unit || 0), 0);
     const unitProfit = c.profit / q;
     const scale = Math.max(price, spent) || 1;
@@ -719,9 +719,6 @@
   }
 
   // ================= Заказы (как «Аналитика → Заказы» в LiteStat) =================
-  // Заказы за период → прогноз денег по ним. Комиссия, логистика и прочие расходы площадки —
-  // средние ФАКТИЧЕСКИЕ по этому товару из отчётов за последние 28 дней (нет истории — средние магазина).
-  // Реклама — факт за период. Себестоимость, внутренние расходы, НДС и налог — из настроек.
   function ordRows(from, to, scheme) {
     const take = (rows) => {
       const m = new Map();
@@ -748,8 +745,8 @@
     const per = new Map(), store = new Map();
     const mk = (a) => {
       const units = a.sold - a.ret;
-      return { commR: a.rev > 0 ? (a.comm + a.acq) / a.rev : null, logiU: units > 0 ? a.logi / units : null,
-        otherR: a.rev > 0 ? (a.stor + a.acc + a.pen - a.comp) / a.rev : null, buy: a.sold > 0 ? (a.sold - a.ret) / a.sold : null };
+      return { commR: a.rev > 0 ? a.comm / a.rev : null, logiU: units > 0 ? a.logi / units : null,
+        buy: a.sold > 0 ? (a.sold - a.ret) / a.sold : null };
     };
     const blank = () => ({ rev: 0, sold: 0, ret: 0, comm: 0, acq: 0, logi: 0, stor: 0, acc: 0, pen: 0, comp: 0 });
     for (const [pid, a] of fin.byP) {
@@ -759,37 +756,80 @@
       store.set(sid, t);
     }
     const st = new Map([...store].map(([sid, a]) => [sid, mk(a)]));
-    UNIT = { tag, per, st, from, to };
+    const recent = new Map((D.orderAverages || []).map(([pid, comm, logi, count]) => [pid, { comm, logi, count }]));
+    UNIT = { tag, per, st, recent };
     return UNIT;
   }
-  function ordCalc(pid, o, adsFact) {
+  function ordCalc(pid, o, fact, expenses) {
     const U = unitCosts();
     const own = U.per.get(pid), sh = U.st.get(storeOf(pid)) || {};
-    const pick = (f) => (own && own[f] != null ? own[f] : sh[f] ?? 0);
+    const pick = (f) => own?.[f] ?? sh[f] ?? 0;
     const qty = o.qty - o.cq, sum = o.sum - o.cs;
-    const p = IX.prod.get(pid) || { offerId: "" };
-    const cost = state.costs[p.offerId];
-    const comm = sum * pick("commR"), logi = qty * pick("logiU"), other = sum * pick("otherR");
-    const internal = qty * cleanMoney(state.internal);
-    const cogs = typeof cost === "number" ? cost * qty : 0;
-    const ads = adsFact || 0;
-    const pre = sum - comm - logi - other - ads - internal - cogs;
-    const vat = Math.max(0, sum) * vatShare();
+    const [covered, coveredSum, revenue, factComm, factLogi, ret, netSold, logiOnlyQty] = fact;
+    const open = Math.max(0, qty - covered), openSum = sum - coveredSum;
+    const estimate = U.recent.get(pid);
+    const comm = factComm + (estimate ? open * estimate.comm : openSum * pick("commR"));
+    const logi = factLogi + Math.max(0, open - logiOnlyQty) * (estimate?.logi ?? pick("logiU"));
+    const income = revenue + openSum;
+    const units = netSold + open;
+    const cost = state.costs[IX.prod.get(pid)?.offerId];
+    const cogs = typeof cost === "number" ? cost * units : 0;
+    const ownCosts = units * cleanMoney(state.internal);
+    const { ads, internal, comp } = expenses;
+    const pre = income + comp - comm - logi - ads - internal - ownCosts - cogs;
+    const vat = Math.max(0, income) * vatShare();
     const t = taxRate();
-    const tax = t ? (state.tax.base === "profit" ? Math.max(0, pre - vat) * t : Math.max(0, sum - vat) * t) : 0;
-    const profit = pre - vat - tax;
-    return { pid, qty, sum, orders: o.qty, cq: o.cq, cs: o.cs, comm, logi, other, ads, internal, cogs, vat, tax, profit,
-      noCost: typeof cost !== "number" && qty > 0, noHist: !own, buy: pick("buy") };
+    const tax = t ? (state.tax.base === "profit" ? Math.max(0, pre - vat) * t : Math.max(0, income - vat) * t) : 0;
+    return { pid, qty, sum, orders: o.qty, cq: o.cq, covered, ret, comm, logi, ads, internal, comp, ownCosts, cogs, vat, tax,
+      profit: pre - vat - tax, noCost: typeof cost !== "number" && units > 0,
+      fallback: open > 0 && !estimate, noHist: open > 0 && !estimate && (own?.commR ?? sh.commR) == null, buy: pick("buy") };
   }
   function ordPeriod(from, to, scheme) {
     const m = ordRows(from, to, scheme);
-    const fin = aggFin(from, to);
-    const rows = [...m].map(([pid, o]) => ordCalc(pid, o, fin.byP.get(pid)?.ads));
-    const extraAds = fin.leftovers.reduce((t, l) => t + (l.ads || 0), 0); // реклама магазина без артикула
-    const T = { orders: 0, cq: 0, cs: 0, qty: 0, sum: 0, comm: 0, logi: 0, other: 0, ads: extraAds, internal: 0, cogs: 0, vat: 0, tax: 0, profit: -extraAds, ret: 0, buyW: 0, buyQ: 0 };
-    const F2 = ["orders", "cq", "cs", "qty", "sum", "comm", "logi", "other", "ads", "internal", "cogs", "vat", "tax", "profit"];
-    for (const r of rows) { for (const f of F2) T[f] += r[f]; if (r.buy != null) { T.buyW += r.buy * r.qty; T.buyQ += r.qty; } }
-    for (const a of fin.byP.values()) T.ret += a.ret;
+    const all = scheme === "all" ? m : ordRows(from, to, "all");
+    const fact = new Map();
+    const factRows = [...(scheme === "fbs" ? [] : D.orderFinFbo || []), ...(scheme === "fbo" ? [] : D.orderFinFbs || [])];
+    for (const r of factRows) {
+      if (r[0] < from || r[0] > to || !m.has(r[1])) continue;
+      const total = fact.get(r[1]) || Array(8).fill(0);
+      for (let i = 0; i < total.length; i++) total[i] += r[i + 2];
+      fact.set(r[1], total);
+    }
+    const fin = aggFin(from, to, { allocate: false });
+    const fields = ["ads", "internal", "comp"];
+    const expenses = (a) => a ? { ads: a.ads, internal: internalFromReport(a), comp: a.comp } : { ads: 0, internal: 0, comp: 0 };
+    const extras = new Map();
+    const addExtra = (sid, a) => {
+      const t = extras.get(sid) || expenses();
+      for (const f of fields) t[f] += a[f];
+      extras.set(sid, t);
+    };
+    for (const l of fin.leftovers) addExtra(l.storeId, expenses(l));
+    const storeSum = new Map();
+    for (const [pid, o] of all) {
+      const sid = storeOf(pid);
+      storeSum.set(sid, (storeSum.get(sid) || 0) + Math.max(0, o.sum - o.cs));
+    }
+    for (const [pid, a] of fin.byP) if (!all.has(pid)) addExtra(storeOf(pid), expenses(a));
+    const rows = [...m].map(([pid, o]) => {
+      const sid = storeOf(pid), price = o.sum - o.cs, allPrice = all.get(pid).sum - all.get(pid).cs;
+      const own = expenses(fin.byP.get(pid)), shared = extras.get(sid);
+      const ownShare = scheme === "all" ? 1 : allPrice > 0 ? price / allPrice : 0;
+      const sharedShare = storeSum.get(sid) > 0 ? price / storeSum.get(sid) : 0;
+      for (const f of fields) own[f] = own[f] * ownShare + (shared?.[f] || 0) * sharedShare;
+      return ordCalc(pid, o, fact.get(pid) || Array(8).fill(0), own);
+    });
+    const T = { orders: 0, cq: 0, covered: 0, qty: 0, sum: 0, comm: 0, logi: 0, ads: 0, internal: 0, comp: 0, ownCosts: 0, cogs: 0, vat: 0, tax: 0, profit: 0, ret: 0, buyW: 0, buyQ: 0 };
+    const moneyAndQty = Object.keys(T).filter((f) => f !== "buyW" && f !== "buyQ");
+    for (const r of rows) {
+      for (const f of moneyAndQty) T[f] += r[f];
+      if (r.buy != null) { T.buyW += r.buy * r.qty; T.buyQ += r.qty; }
+    }
+    if (scheme === "all") for (const [sid, a] of extras) {
+      if (storeSum.get(sid) > 0) continue;
+      for (const f of fields) T[f] += a[f];
+      T.profit += a.comp - a.ads - a.internal;
+    }
     T.buy = T.buyQ > 0 ? T.buyW / T.buyQ : null;
     T.rent = T.sum > 0 ? T.profit / T.sum : null;
     T.roi = T.cogs > 0 ? T.profit / T.cogs : null;
@@ -830,6 +870,40 @@
     const d = (cur - prev) / Math.abs(prev);
     return `<span class="delta">${d >= 0 ? "+" : "−"}${nf0.format(Math.abs(d * 100))}%</span>`;
   };
+  const METRIC_HELP = {
+    name: "Товар и его артикул в выбранном магазине.",
+    orders: "Все оформленные заказы в штуках, включая те, которые затем отменили.",
+    cq: "Количество отменённых товаров по дате оформления заказа. Доля отмен — отменённые штуки ÷ все заказанные штуки.",
+    sum: "Сумма и количество заказанных товаров за вычетом отмен. Сумма берётся по ценам из выгрузки заказов.",
+    covered: "Доля неотменённых заказанных штук, по которым удалось связать продажу или возврат из отчёта с заказом.",
+    ret: "Возвращённые штуки из отчётов, привязанные к дате оформления исходного заказа.",
+    units: "Штуки из отчётов о продажах за вычетом возвращённых штук.",
+    rev: "Выручка по отчётам маркетплейса за вычетом возвратов.",
+    comm: "Вознаграждение маркетплейса. По связанным продажам берём начисления, по оставшимся штукам — среднее по последним 10 выкупленным заказам товара.",
+    logi: "Доставка и возврат конкретных заказов. Используем начисления из отчёта и среднюю стоимость доставки по последним 10 выкупленным заказам для оставшихся штук.",
+    ads: "Фактические расходы на рекламу за выбранные даты. Общие расходы распределяются внутри магазина по сумме заказов.",
+    internal: "Начисления из отчётов за выбранные даты. Сюда входят кросс-докинг, непредвиденная логистика, хранение, приёмка, утилизация, подписки, эквайринг, штрафы и другие услуги. Общие суммы магазина распределяются по обороту внутри магазина. В «Заказах» берём сумму заказов, в «Прибыли» — фактическую выручку.",
+    comp: "Компенсации и прочие возмещения, полученные от маркетплейса по данным отчётов.",
+    cogs: "Себестоимость одной штуки из настроек × количество штук с учётом известных возвратов.",
+    ownCosts: "Ваши затраты на штуку из настроек, например упаковка или фулфилмент.",
+    vat: "НДС по ставке из настроек. Доля НДС в сумме равна ставке, делённой на 100 плюс ставка.",
+    tax: "Налог по ставке и базе из настроек. При расчёте базы из доходов вычитается НДС.",
+    forecast: "Выручка по связанным начислениям плюс сумма оставшихся заказов. Прибавляем компенсации, вычитаем расходы, себестоимость, НДС и налог. Комиссия и логистика оставшихся заказов рассчитаны по истории выкупов.",
+    profit: "Выручка и компенсации по отчётам за период за вычетом фактических начислений площадки, рекламы, себестоимости, своих расходов, НДС и налога.",
+    rent: "Прогноз прибыли ÷ сумма заказов без отмен × 100%.",
+    margin: "Чистая прибыль ÷ выручка × 100%.",
+    roi: "Прибыль ÷ себестоимость × 100%.",
+    orderDrr: "Расходы на рекламу ÷ сумма заказов без отмен × 100%.",
+    drr: "Расходы на рекламу ÷ выручка × 100%.",
+    daily: "Сумма или количество заказов без отмен, делённые на число календарных дней периода.",
+    buy: "Оценка по отчётам за последние 28 дней. Проданные штуки за вычетом возвратов делятся на проданные штуки. Для итога доли товаров взвешиваются по количеству заказов.",
+    abc: "Группа товара по его вкладу в прибыль или выручку в зависимости от выбранного режима.",
+    pay: "Сумма к перечислению по отчёту площадки до учёта ваших расходов, НДС и налога.",
+  };
+  function metricHelp(id, name, description = METRIC_HELP[id]) {
+    if (!description) return "";
+    return `<button type="button" class="metric-help" data-act="metric-help" data-label="${esc(name)}" data-help="${esc(description)}" aria-label="Что значит «${esc(name)}»?">?</button>`;
+  }
   function renderOrders() {
     const v = state.view;
     const n = Number(v.ord) || 1, scheme = v.ordScheme || "all", unit = v.ordUnit === "qty" ? "qty" : "rub";
@@ -837,10 +911,9 @@
     const to = day || IX.today, from = addDays(to, -(n - 1)), pFrom = addDays(from, -n), pTo = addDays(from, -1);
     const cur = ordPeriod(from, to, scheme), prev = ordPeriod(pFrom, pTo, scheme);
     const T = cur.T, P = prev.T;
-    const U = unitCosts();
-    const late = to > IX.finToMax; // за этот день площадки ещё не прислали отчёты и рекламу
-    const L = (name, val, d, hint) => `<li><span class="nm">${name}${hint ? ` <span class="muted small">${hint}</span>` : ""}</span><span class="vl">${val}</span><span class="dl">${d || ""}</span></li>`;
-    const neg = (x) => (Math.round(x) === 0 ? "0 ₽" : "−" + rub(Math.abs(x)));
+    const status = T.covered === 0 ? "прогноз" : T.covered < T.qty ? "факт и прогноз" : "по отчётам";
+    const L = (id, name, val, d, hint) => `<li><span class="nm">${name} ${metricHelp(id, name)}${hint ? ` <span class="muted small">${hint}</span>` : ""}</span><span class="vl">${val}</span><span class="dl">${d || ""}</span></li>`;
+    const neg = (x) => rub(-x);
     const hourly = n === 1;
     const tm = ordByTime(from, to, scheme, hourly), tp = ordByTime(pFrom, pTo, scheme, hourly);
     const cols = hourly ? [...Array(24).keys()] : Array.from({ length: n }, (_, i) => addDays(from, i));
@@ -863,27 +936,30 @@
         <section class="panel ord-kpi">
           <h2>Показатели</h2>
           <ul class="kv">
-            ${L("Заказы", int(T.orders) + " шт", delta(T.orders, P.orders))}
-            ${L("Отмены", int(T.cq) + " шт", deltaN(T.cq, P.cq), T.orders ? pct(T.cq / T.orders) : "")}
-            ${L("<b>Итого заказов</b>", `<b>${rub(T.sum)} / ${int(T.qty)} шт</b>`, delta(T.sum, P.sum))}
-            ${L("Возвраты", late ? "—" : int(T.ret) + " шт", late ? "" : deltaN(T.ret, P.ret), late ? "отчётов ещё нет" : "по отчётам")}
-            ${L("Комиссия", neg(T.comm), deltaN(T.comm, P.comm), "прогноз")}
-            ${L("Логистика", neg(T.logi), deltaN(T.logi, P.logi), "прогноз")}
-            ${L("Хранение, приёмка, штрафы", neg(T.other), deltaN(T.other, P.other), "прогноз")}
-            ${L("Реклама", late ? "—" : neg(T.ads), late ? "" : deltaN(T.ads, P.ads), late ? "данных ещё нет" : "факт")}
-            ${L("Внутренние расходы", neg(T.internal), deltaN(T.internal, P.internal), cleanMoney(state.internal) ? rub2(state.internal) + " × шт" : `<a href="#/settings">указать</a>`)}
-            ${L("Себестоимость", neg(T.cogs), deltaN(T.cogs, P.cogs))}
-            ${L("НДС", neg(T.vat), deltaN(T.vat, P.vat), vatShare() ? state.vat + "%" : "без НДС")}
-            ${L("Налог", neg(T.tax), deltaN(T.tax, P.tax), taxRate() ? state.tax.rate + "%" : `<a href="#/settings">не указан</a>`)}
-            ${L("<b>Прибыль</b>", `<b class="${signCls(T.profit)}">${rub(T.profit)}</b>`, delta(T.profit, P.profit))}
-            ${L("Рентабельность", pct(T.rent), "", "прибыль ÷ заказы")}
-            ${L("ROI", pct(T.roi), "", "прибыль ÷ себестоимость")}
-            ${L("ДРР", pct(T.drr), "")}
-            ${L("Заказов в день", `${rub(T.sum / n)} / ${int(T.qty / n)} шт`, "")}
-            ${L("Выкупаемость", pct(T.buy), "", "по отчётам 28 дн.")}
+            ${L("orders", "Заказы", int(T.orders) + " шт", delta(T.orders, P.orders))}
+            ${L("cq", "Отмены", int(T.cq) + " шт", deltaN(T.cq, P.cq), T.orders ? pct(T.cq / T.orders) : "")}
+            ${L("sum", "Итого заказов", `<b>${rub(T.sum)} / ${int(T.qty)} шт</b>`, delta(T.sum, P.sum))}
+            ${L("covered", "Фактические данные", pct(T.qty ? T.covered / T.qty : null))}
+            ${L("ret", "Возвраты", int(T.ret) + " шт", deltaN(T.ret, P.ret))}
+            ${L("comm", "Комиссия", neg(T.comm), deltaN(T.comm, P.comm), status)}
+            ${L("logi", "Логистика", neg(T.logi), deltaN(T.logi, P.logi), status)}
+            ${L("ads", "Реклама", neg(T.ads), deltaN(T.ads, P.ads))}
+            ${L("internal", "Внутренние расходы", neg(T.internal), deltaN(T.internal, P.internal), "по отчётам")}
+            ${L("comp", "Компенсации", rub(T.comp), deltaN(T.comp, P.comp))}
+            ${L("cogs", "Себестоимость", neg(T.cogs), deltaN(T.cogs, P.cogs))}
+            ${cleanMoney(state.internal) ? L("ownCosts", "Свои расходы", neg(T.ownCosts), deltaN(T.ownCosts, P.ownCosts)) : ""}
+            ${L("vat", "НДС", neg(T.vat), deltaN(T.vat, P.vat), vatShare() ? state.vat + "%" : "без НДС")}
+            ${L("tax", "Налог", neg(T.tax), deltaN(T.tax, P.tax), taxRate() ? state.tax.rate + "%" : `<a href="#/settings">не указан</a>`)}
+            ${L("forecast", "Прогноз прибыли", `<b class="${signCls(T.profit)}">${rub(T.profit)}</b>`, delta(T.profit, P.profit))}
+            ${L("rent", "Рентабельность", pct(T.rent))}
+            ${L("roi", "ROI", pct(T.roi))}
+            ${L("orderDrr", "ДРР", pct(T.drr))}
+            ${L("daily", "Заказов в день", `${rub(T.sum / n)} / ${int(T.qty / n)} шт`)}
+            ${L("buy", "Выкупаемость", pct(T.buy), "", "по отчётам 28 дн.")}
           </ul>
           ${noCost ? `<p class="banner small">Нет себестоимости у ${noCost} ${plural(noCost, "товара", "товаров", "товаров")} — их прибыль завышена. <a href="#/settings?filter=nocost">Указать</a></p>` : ""}
-          <p class="muted small">Прогноз: комиссия, логистика и прочее — средние фактические по товару из отчётов площадок за ${dm(U.from)}–${dm(U.to)}${noHist ? ` (у ${noHist} без истории — средние магазина)` : ""}. Реклама — факт за период. Себестоимость, внутренние расходы, НДС и налог — из настроек.</p>
+          ${noReportNote(to, true)}
+          ${rows.some((r) => r.fallback) ? `<p class="muted small">При отсутствии связанных выкупов используем средние из отчётов за 28 дней по товару или магазину.${noHist ? ` У ${noHist} товаров нет данных для оценки комиссии.` : ""}</p>` : ""}
         </section>
         <section class="panel ord-chart">
           <div class="abc-head"><h2>${hourly ? "По часам" : "По дням"}</h2>${seg("ord-unit", [["rub", "В рублях"], ["qty", "В штуках"]], unit, "Единицы")}</div>
@@ -894,7 +970,7 @@
       <div class="list-head"><h2>По товарам <span class="muted small">${rows.length}</span></h2></div>
       <div class="tbl-wrap">
         <table class="items">
-          <thead><tr><th scope="col">Товар</th><th scope="col">Заказы, шт</th><th scope="col">Отмены</th><th scope="col">Сумма</th><th scope="col">Прибыль</th><th scope="col">Рентаб.</th></tr></thead>
+          <thead><tr>${[["name", "Товар"], ["orders", "Заказы, шт"], ["cq", "Отмены"], ["sum", "Сумма"], ["forecast", "Прогноз прибыли"], ["rent", "Рентаб."]].map(([id, label]) => `<th scope="col">${label} ${metricHelp(id, label)}</th>`).join("")}</tr></thead>
           <tbody>${shown.map((r) => { const p = IX.prod.get(r.pid) || { name: r.pid, offerId: "", store: storeOf(r.pid), mp: "" };
             return `<tr data-item="${esc(r.pid)}" tabindex="0"><td class="name">${thumb(p)}<div><b>${esc(p.name)}</b><span class="muted small">${chip(p.mp)} ${esc(storeName(p.store))} · ${esc(p.offerId)}${r.noCost ? " ⚪" : ""}</span></div></td>
               <td data-l="Заказы">${int(r.orders)}</td><td data-l="Отмены">${int(r.cq)}</td><td data-l="Сумма">${rub(r.sum)}</td>
@@ -906,9 +982,8 @@
 
   // ================= Отчёт маркетплейса =================
   const REPORT_ROWS = [
-    ["rev", "Продано (выручка)", 1], ["comm", "Комиссия", -1], ["logi", "Логистика", -1], ["stor", "Хранение", -1], ["acc", "Приёмка", -1],
-    ["pen", "Штрафы и удержания", -1], ["acq", "Эквайринг", -1], ["ads", "Реклама", -1], ["comp", "Компенсации", 1], ["pay", "К перечислению", 0],
-    ["cogs", "Себестоимость", -1], ["internal", "Внутренние расходы", -1], ["vat", "НДС", -1], ["tax", "Налог", -1], ["profit", "Чистая прибыль", 2], ["margin", "Рентабельность (прибыль ÷ выручка)", 3], ["roi", "ROI (прибыль ÷ себестоимость)", 3]
+    ["rev", "Продано (выручка)", 1], ["comm", "Комиссия", -1], ["logi", "Логистика", -1], ["ads", "Реклама", -1], ["comp", "Компенсации", 1], ["pay", "К перечислению", 0],
+    ["cogs", "Себестоимость", -1], ["internal", "Внутренние расходы", -1], ["ownCosts", "Свои расходы", -1], ["vat", "НДС", -1], ["tax", "Налог", -1], ["profit", "Чистая прибыль", 2], ["margin", "Рентабельность (прибыль ÷ выручка)", 3], ["roi", "ROI (прибыль ÷ себестоимость)", 3]
   ];
   function periodsFor(kind, to) {
     const out = [];
@@ -937,14 +1012,14 @@
     const per = periodsFor(kind, IX.finToMax);
     const cols = per.map(([from, to, label]) => {
       const fin = aggFin(from, to, { allocate: false });
-      const t = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, internal: 0, vat: 0, tax: 0, profit: 0 };
+      const t = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, internal: 0, ownCosts: 0, vat: 0, tax: 0, profit: 0 };
       for (const [pid, a] of fin.byP) { const c = calc(pid, a); for (const k in t) t[k] += c[k] || 0; }
       for (const l of fin.leftovers) { const c = calc("*" + l.storeId, l); for (const k in t) t[k] += c[k] || 0; }
       t.margin = t.rev > 0 ? t.profit / t.rev : null;
       t.roi = t.cogs > 0 ? t.profit / t.cogs : null;
       return { label, from, to, t };
     });
-    const total = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, internal: 0, vat: 0, tax: 0, profit: 0 };
+    const total = { rev: 0, comm: 0, logi: 0, stor: 0, acc: 0, pen: 0, acq: 0, ads: 0, comp: 0, pay: 0, cogs: 0, internal: 0, ownCosts: 0, vat: 0, tax: 0, profit: 0 };
     for (const c of cols) for (const k in total) total[k] += c.t[k];
     total.margin = total.rev > 0 ? total.profit / total.rev : null;
     total.roi = total.cogs > 0 ? total.profit / total.cogs : null;
@@ -964,7 +1039,7 @@
       <div class="tbl-wrap scroll-x">
         <table class="report">
           <thead><tr><th scope="col">Показатель</th>${cols.map((c) => `<th scope="col">${esc(c.label)}</th>`).join("")}<th scope="col">Весь период</th></tr></thead>
-          <tbody>${REPORT_ROWS.map(([k, l, s]) => `<tr class="${s >= 2 ? "strong" : s === 0 ? "sub" : ""}"><th scope="row">${l}</th>${cols.map((c) => `<td class="${k === "profit" ? signCls(c.t[k]) : ""}">${cell(k, c.t[k])}</td>`).join("")}<td class="${k === "profit" ? signCls(total[k]) : ""}"><b>${cell(k, total[k])}</b></td></tr>`).join("")}</tbody>
+          <tbody>${REPORT_ROWS.map(([k, l, s]) => `<tr class="${s >= 2 ? "strong" : s === 0 ? "sub" : ""}"><th scope="row">${l} ${metricHelp(k, l, k === "comm" ? "Фактическая комиссия из отчётов о продажах." : k === "logi" ? "Фактическая доставка и возврат заказов по отчётам." : k === "ads" ? "Фактические расходы на рекламу из данных площадок." : undefined)}</th>${cols.map((c) => `<td class="${k === "profit" ? signCls(c.t[k]) : ""}">${cell(k, c.t[k])}</td>`).join("")}<td class="${k === "profit" ? signCls(total[k]) : ""}"><b>${cell(k, total[k])}</b></td></tr>`).join("")}</tbody>
         </table>
       </div>
       <p class="muted small">Расходы показаны положительными числами. Себестоимость = выкупы минус возвраты × себестоимость из настроек. «К перечислению» — что площадка перечисляет вам до себестоимости, НДС и налога.</p>`;
@@ -1039,8 +1114,8 @@
           <p class="muted small">НДС считается внутри цены: при 5% это 5/105 выручки (≈4,76%). Налог УСН с ним считается от выручки без НДС.</p>
         </section>
         <section class="panel">
-          <h2>Внутренние расходы</h2>
-          <p class="muted small">Ваши расходы на 1 проданную штуку сверх себестоимости: упаковка, фулфилмент, доставка до склада. Как «Внутренние расходы» в LiteStat.</p>
+          <h2>Свои расходы</h2>
+          <p class="muted small">Ваши расходы сверх себестоимости: упаковка, фулфилмент, доставка до склада. Внутренние расходы маркетплейсов загружаются из отчётов автоматически.</p>
           <div class="form-row">
             <div class="field"><label for="internal-cost">₽ на 1 шт</label><input id="internal-cost" type="number" inputmode="decimal" min="0" step="any" value="${cleanMoney(state.internal) || ""}" placeholder="например, 4.3"></div>
           </div>
@@ -1207,9 +1282,9 @@
   function csvProfit() {
     const { from, to } = finPeriod();
     const { rows } = profitRows();
-    const out = [["Период", "Магазин", "Площадка", "Артикул продавца", "Артикул МП", "Название", "Выкупы, шт", "Выручка, ₽", "Комиссия", "Логистика", "Хранение", "Приёмка", "Штрафы и удержания", "Эквайринг", "Компенсации", "Реклама", "Себестоимость", "Внутренние расходы", "НДС", "Налог", "Чистая прибыль, ₽", "Рентабельность, %", "ROI, %", "ДРР, %", "ABC прибыль", "ABC выручка"]];
-    for (const c of rows) out.push([`${from}…${to}`, storeName(c.p.store), mpName(c.p.mp), c.p.offerId, c.p.sku, c.p.name, c.units, c.rev, c.comm, c.logi, c.stor, c.acc, c.pen, c.acq, c.comp, c.ads,
-      c.cost == null ? "" : c.cogs, c.internal, c.vat, c.tax, c.profit, c.margin == null ? "" : c.margin * 100, c.roi == null ? "" : c.roi * 100, c.drr == null ? "" : c.drr * 100, c.abc_profit, c.abc_rev]);
+    const out = [["Период", "Магазин", "Площадка", "Артикул продавца", "Артикул МП", "Название", "Выкупы, шт", "Выручка, ₽", "Комиссия", "Логистика", "Хранение", "Приёмка", "Штрафы и удержания", "Эквайринг", "Компенсации", "Внутренняя логистика", "Реклама", "Себестоимость", "Свои расходы", "НДС", "Налог", "Чистая прибыль, ₽", "Рентабельность, %", "ROI, %", "ДРР, %", "ABC прибыль", "ABC выручка"]];
+    for (const c of rows) out.push([`${from}…${to}`, storeName(c.p.store), mpName(c.p.mp), c.p.offerId, c.p.sku, c.p.name, c.units, c.rev, c.comm, c.logi, c.stor, c.acc, c.pen, c.acq, c.comp, c.serviceLogi, c.ads,
+      c.cost == null ? "" : c.cogs, c.ownCosts, c.vat, c.tax, c.profit, c.margin == null ? "" : c.margin * 100, c.roi == null ? "" : c.roi * 100, c.drr == null ? "" : c.drr * 100, c.abc_profit, c.abc_rev]);
     download(`unitka-pribyl-${from}-${to}.csv`, csv(out), "text/csv;charset=utf-8");
     toast("CSV скачан");
   }
@@ -1239,6 +1314,13 @@
     const b = e.target.closest("[data-act]");
     if (b) {
       const act = b.dataset.act, v = b.dataset.v;
+      if (act === "metric-help") {
+        const dialog = document.getElementById("metric-dialog");
+        dialog.querySelector("h2").textContent = b.dataset.label;
+        dialog.querySelector("p").textContent = b.dataset.help;
+        dialog.showModal();
+        return;
+      }
       if (act === "demo") return openDemo();
       if (act === "lock") { D = null; IX = null; location.hash = "#/"; return render(); }
       if (act === "store") { state.view.stores = v; listLimit = 50; save(); const r = route(); r.q.delete("store"); location.hash = "#/" + r.parts.join("/") + (String(r.q) ? "?" + r.q : ""); return render(); }
@@ -1275,7 +1357,7 @@
   }
   document.addEventListener("keydown", (e) => {
     const tr = e.target.closest && e.target.closest("tr[data-item], tr[data-pid]");
-    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRow(tr); }
+    if (tr && !e.target.closest("button, a, input, select") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRow(tr); }
   });
   document.addEventListener("change", (e) => {
     if (e.target.matches("input[data-day]") && e.target.value) { DAY[e.target.dataset.day] = e.target.value; return render(); }

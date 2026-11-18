@@ -1,3 +1,4 @@
+import { OrderFinance } from "./order-fin.mjs";
 // Сбор данных одного магазина Ozon. Только чтение.
 import { F, finAgg, Agg, OrdAgg, mskParts, num, daysAgo, eachDay } from "./lib.mjs";
 
@@ -75,7 +76,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
 
   // 3. Заказы FBO и FBS
   log("  заказы");
-  const ord = new OrdAgg();
+  const ord = new OrdAgg(), orderFin = new OrderFinance();
   const since = daysAgo(orderDays, now) + "T00:00:00.000Z", to = new Date(now).toISOString();
   const addPosting = (p, fbs) => {
     const { day: d, hour } = mskParts(p.in_process_at || p.created_at);
@@ -83,7 +84,9 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
     for (const it of p.products || []) {
       const q = num(it.quantity);
       const sku = String(it.sku);
-      ord.add(d, pid(sku), hour, fbs, cancelled, num(it.price), q);
+      const id = prod.get(sku)?.pid ?? pid(sku);
+      if (orderFin.order(p.posting_number, id, d, fbs, cancelled, num(it.price), q)) continue;
+      ord.add(d, id, hour, fbs, cancelled, num(it.price), q);
       if (!prod.has(sku)) prod.set(sku, { pid: pid(sku), store: store.id, mp: "ozon", sku, offerId: it.offer_id || "", name: it.name || sku, category: "", photo: "", price: null });
     }
   };
@@ -110,17 +113,28 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   // 4. Начисления по дням (финансы)
   log("  начисления");
   const fin = finAgg();
+  const serviceTypes = new Set();
+  try {
+    const res = await post("/v1/finance/accrual/types", {});
+    const types = res?.types ?? res?.result?.types ?? res?.result ?? [];
+    for (const type of Array.isArray(types) ? types : []) {
+      if (/кросс|непредвид|между склад|вывоз|cross.?dock/i.test(type.name ?? type.type_name ?? "")) {
+        serviceTypes.add(Number(type.id ?? type.type_id));
+      }
+    }
+  } catch (e) { warnings.push(`Справочник начислений Ozon: ${e.message}`); }
   const days = eachDay(daysAgo(finDays, now), daysAgo(1, now));
   for (const d of days) {
     let last = "";
     for (let guard = 0; guard < 500; guard++) {
       const res = await post("/v1/finance/accrual/by-day", { date: d, last_id: last });
-      for (const a of res?.accruals || []) addOzonAccrual(fin, a, (sku) => pid(sku), "*" + store.id);
+      for (const a of res?.accruals || []) addOzonAccrual(fin, a, (sku) => prod.get(sku)?.pid ?? pid(sku), "*" + store.id, orderFin, serviceTypes);
       last = res?.last_id || "";
       if (!last) break;
     }
     out.finTo = d;
   }
+  Object.assign(out, orderFin.result());
   out.fin = fin.rows();
   out.products = [...new Map([...prod.values()].map((p) => [p.pid, p])).values()];
   return out;
@@ -130,38 +144,48 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
 const amt = (v) => (v && typeof v === "object" ? num(v.amount) : num(v));
 
 // Одно начисление Ozon → суммы по статьям. Ozon отдаёт расходы со знаком «−», мы храним их положительными.
-export function addOzonAccrual(fin, a, pid, star = "*") {
+export function addOzonAccrual(fin, a, pid, star = "*", orderFin, serviceTypes = new Set()) {
   const d = String(a.date).slice(0, 10);
   const total = amt(a.total_amount);
   let mapped = 0;
+  const ref = a.posting?.posting_number ?? a.posting?.number ?? a.posting_number;
   const put = (id, bucket, amount) => {
     mapped += amount;
     const v = { [F.pay]: amount };
     if (bucket === F.comp) v[F.comp] = amount; else v[bucket] = -amount;
     fin.add(d, id, v);
+    if (bucket === F.logi) orderFin?.charge(ref, id, d, v);
+  };
+  const serviceBucket = (s, posting = false) => {
+    const type = Number(s.type_id);
+    const bucket = bucketOf(type);
+    if (serviceTypes.has(type) || (!posting && bucket === F.logi)) return F.serviceLogi;
+    return bucket;
   };
   if (a.accrued_category === "POSTING" && a.posting) {
     for (const p of a.posting.products || []) {
       const id = p.sku ? pid(String(p.sku)) : star;
       const c = p.commission;
-      if (c) {
+      if (c?.sale_amount != null || c?.seller_price != null) {
         const sale = amt(c.sale_amount ?? c.seller_price);
         const comm = amt(c.commission ?? c.sale_commission); // отрицательная
         const q = num(p.quantity) || 1;
-        fin.add(d, id, { [F.rev]: sale, [sale >= 0 ? F.sold : F.ret]: q, [F.comm]: -comm, [F.pay]: sale + comm });
+        const v = { [F.rev]: sale, [sale >= 0 ? F.sold : F.ret]: q, [F.comm]: -comm, [F.pay]: sale + comm };
+        fin.add(d, id, v);
+        orderFin?.charge(ref, id, d, v);
         mapped += sale + comm;
       }
-      for (const s of p.delivery?.services || []) put(id, bucketOf(s.type_id), amt(s.accrued));
+      for (const s of p.delivery?.services || []) put(id, serviceBucket(s, true), amt(s.accrued));
     }
   } else if (a.accrued_category === "ITEM" && a.item_fees) {
     for (const it of a.item_fees.fees || []) {
       const id = it.sku ? pid(String(it.sku)) : star;
-      for (const f of it.fees || []) put(id, bucketOf(f.type_id), amt(f.accrued));
+      for (const f of it.fees || []) put(id, serviceBucket(f), amt(f.accrued));
     }
   } else if (a.non_item_fee) {
-    put(star, bucketOf(a.non_item_fee.type_id), amt(a.non_item_fee.accrued));
+    put(star, serviceBucket(a.non_item_fee), amt(a.non_item_fee.accrued));
   }
   // Всё, что не разложилось по статьям (например, грузоместа), — в «прочие» по магазину, чтобы итог сходился.
   const rest = total - mapped;
-  if (Math.abs(rest) > 0.009) put(star, a.accrued_category === "CONTAINER" || a.container_fees ? F.logi : F.pen, rest);
+  if (Math.abs(rest) > 0.009) put(star, a.accrued_category === "CONTAINER" || a.container_fees ? F.serviceLogi : F.pen, rest);
 }

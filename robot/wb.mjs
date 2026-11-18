@@ -1,3 +1,4 @@
+import { OrderFinance } from "./order-fin.mjs";
 // Сбор данных одного магазина Wildberries. Только чтение.
 import { F, finAgg, Agg, OrdAgg, num, day, daysAgo, sleep, jwtExpires } from "./lib.mjs";
 
@@ -53,7 +54,8 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
 
   // 3. Заказы (последние 60 дней — чтобы сравнивать 28 дней с прошлыми 28)
   log("  заказы");
-  const ord = new OrdAgg();
+  const ord = new OrdAgg(), orderFin = new OrderFinance();
+  const seenOrders = new Set();
   const orderFrom = daysAgo(orderDays, now);
   let dateFrom = orderFrom + "T00:00:00";
   for (let guard = 0; guard < 20; guard++) {
@@ -64,6 +66,9 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
       // время заказа WB приходит уже по Москве: "2026-11-15T13:45:00"
       const hour = Number(String(o.date).slice(11, 13));
       const fbs = /продавц/i.test(String(o.warehouseType || ""));
+      if (o.srid && seenOrders.has(o.srid)) continue;
+      if (o.srid) seenOrders.add(o.srid);
+      orderFin.order(o.srid, pid(o.nmId), d, fbs, !!o.isCancel, num(o.priceWithDisc));
       ord.add(d, pid(o.nmId), hour, fbs, !!o.isCancel, num(o.priceWithDisc));
       if (!prod.has(o.nmId)) prod.set(o.nmId, { pid: pid(o.nmId), store: store.id, mp: "wb", sku: String(o.nmId), offerId: o.supplierArticle || "", name: [o.brand, o.subject].filter(Boolean).join(" "), category: o.subject || "", photo: "", price: null });
     }
@@ -81,7 +86,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
   try {
     for (let guard = 0; guard < 100; guard++) {
       const rows = (await http(`${H.finance}/api/finance/v1/sales-reports/detailed`, { method: "POST", headers: auth, body: { dateFrom: dFrom, dateTo: dTo, limit: 100000, rrdId } })) || [];
-      for (const r of rows) addWbFinRow(fin, r, pid, "*" + store.id);
+      for (const r of rows) addWbFinRow(fin, r, pid, "*" + store.id, orderFin);
       for (const r of rows) if (r.dateTo && (!maxDate || r.dateTo > maxDate)) maxDate = r.dateTo;
       if (rows.length < 100000) break;
       rrdId = rows[rows.length - 1].rrdId;
@@ -116,6 +121,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
     for (const a of out.ads) fin.add(a[0], a[1], { [F.ads]: a[2] });
   } catch (e) { warnings.push(`Реклама WB: ${e.message}`); }
 
+  Object.assign(out, orderFin.result());
   out.fin = fin.rows();
   out.finTo = maxDate;
 
@@ -162,7 +168,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
 }
 
 // Одна строка отчёта о реализации → суммы по статьям. Расходы — положительными числами.
-export function addWbFinRow(fin, r, pid, star = "*") {
+export function addWbFinRow(fin, r, pid, star = "*", orderFin) {
   const d = String(r.rrDate || r.saleDt || r.dateTo).slice(0, 10);
   const id = r.nmId ? pid(r.nmId) : star;
   const type = String(r.docTypeName || "");
@@ -185,10 +191,12 @@ export function addWbFinRow(fin, r, pid, star = "*") {
   // Удержания за «ВБ.Продвижение» не считаем — рекламу берём из статистики кампаний по артикулам.
   if (/продвижен/i.test(String(r.bonusTypeName || ""))) ded = 0;
   const comp = num(r.additionalPayment);
-  v[F.logi] = (v[F.logi] || 0) + logi;
+  const internalLogi = !r.nmId || /кросс|непредвид|между склад|вывоз/i.test(String(r.bonusTypeName || ""));
+  v[internalLogi ? F.serviceLogi : F.logi] = logi;
   v[F.stor] = stor; v[F.acc] = acc; v[F.pen] = pen + ded; v[F.comp] = comp;
   v[F.pay] = (v[F.pay] || 0) - logi - stor - acc - pen - num(r.deduction) + comp;
   fin.add(d, id, v);
+  orderFin?.charge(r.srid, id, d, v);
 }
 
 function findArray(res) {

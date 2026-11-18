@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { encrypt, decrypt } from "./crypto.mjs";
 import { finAgg, F, OrdAgg, mskParts } from "./lib.mjs";
+import { OrderFinance } from "./order-fin.mjs";
 import { addWbFinRow } from "./wb.mjs";
 import { addOzonAccrual, bucketOf } from "./ozon.mjs";
 
@@ -62,7 +63,7 @@ await t("Ozon: неразобранный остаток уходит в «пр�
   const fin = finAgg();
   addOzonAccrual(fin, { date: "2026-11-10", accrued_category: "CONTAINER", total_amount: { amount: "-77" }, container_fees: { x: 1 } }, (x) => "o:" + x, "*o");
   const r = fin.rows()[0];
-  assert.equal(r[1], "*o"); assert.equal(r[F.logi], 77); assert.equal(r[F.pay], -77);
+  assert.equal(r[1], "*o"); assert.equal(r[F.serviceLogi], 77); assert.equal(r[F.pay], -77);
 });
 
 await t("Заказы: по часам и FBS сходятся с итогом, отмены не попадают в часы", async () => {
@@ -78,5 +79,29 @@ await t("Заказы: по часам и FBS сходятся с итогом, 
 await t("Ozon: время по Гринвичу переводится в московское (и день тоже)", async () => {
   assert.deepEqual(mskParts("2026-11-15T22:30:00Z"), { day: "2026-11-16", hour: 1 });
   assert.deepEqual(mskParts("2026-11-15T09:05:00.000Z"), { day: "2026-11-15", hour: 12 });
+});
+await t("Начисления относятся к дате заказа, возвраты вычитаются, прогноз берёт 10 выкупов", () => {
+  const orders = new OrderFinance();
+  orders.order("returned", "s:1", "2026-11-01", true, false, 100);
+  orders.charge("returned", "s:1", "2026-11-02", { [F.rev]: 100, [F.sold]: 1, [F.comm]: 25, [F.logi]: 10 });
+  orders.charge("returned", "s:1", "2026-11-03", { [F.rev]: -100, [F.ret]: 1, [F.comm]: -25, [F.logi]: 10 });
+  for (let i = 1; i <= 11; i++) {
+    orders.charge(i, "s:1", `2026-11-${String(i).padStart(2, "0")}`, { [F.sold]: 1, [F.comm]: i, [F.logi]: 2 * i });
+  }
+  const { orderFinFbs, orderFinFbo, orderAverages } = orders.result();
+  assert.deepEqual(orderFinFbs, [["2026-11-01", "s:1", 1, 100, 0, 0, 20, 1, 0, 0]]);
+  assert.deepEqual(orderFinFbo, []);
+  assert.deepEqual(orderAverages, [["s:1", 6.5, 13, 10]]);
+});
+await t("Внутренняя логистика выделена из доставки, сумма удержаний сохранена", () => {
+  const fin = finAgg();
+  addWbFinRow(fin, { rrDate: "2026-11-10", nmId: 9, bonusTypeName: "Непредвиденная логистика", deliveryService: 60 }, (x) => "s:" + x);
+  addOzonAccrual(fin, { date: "2026-11-10", accrued_category: "POSTING", total_amount: "-20", posting: {
+    products: [{ sku: 9, delivery: { services: [{ type_id: 501, accrued: "-20" }] } }],
+  } }, (x) => "s:" + x, "*s", undefined, new Set([501]));
+  const [r] = fin.rows();
+  assert.equal(r[F.serviceLogi], 80);
+  assert.equal(r[F.logi], 0);
+  assert.equal(r[F.pay], -80);
 });
 console.log(`\nВсе проверки пройдены: ${n}`);

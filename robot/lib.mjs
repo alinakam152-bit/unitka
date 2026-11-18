@@ -56,8 +56,8 @@ export function makeHttp(fetchImpl = globalThis.fetch, log = () => {}) {
 }
 
 // Финансовые строки: сумма по (день, товар). Товар "*" — расходы магазина без артикула.
-export const F = { date: 0, pid: 1, rev: 2, sold: 3, ret: 4, comm: 5, logi: 6, stor: 7, acc: 8, pen: 9, acq: 10, ads: 11, comp: 12, pay: 13 };
-export const FIN_FIELDS = ["rev", "sold", "ret", "comm", "logi", "stor", "acc", "pen", "acq", "ads", "comp", "pay"];
+export const F = { date: 0, pid: 1, rev: 2, sold: 3, ret: 4, comm: 5, logi: 6, stor: 7, acc: 8, pen: 9, acq: 10, ads: 11, comp: 12, pay: 13, serviceLogi: 14 };
+export const FIN_FIELDS = ["rev", "sold", "ret", "comm", "logi", "stor", "acc", "pen", "acq", "ads", "comp", "pay", "serviceLogi"];
 export class Agg {
   constructor(width) { this.map = new Map(); this.width = width; }
   add(date, pid, values) {
@@ -72,7 +72,7 @@ export class Agg {
       .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }
 }
-export const finAgg = () => new Agg(12);
+export const finAgg = () => new Agg(FIN_FIELDS.length);
 
 // Заказы подробно: по дням (все и отдельно FBS) и по часам. День и час — по Москве, как у площадок.
 //   orders    — [день, товар, шт, ₽, отменено шт, отменено ₽]        (все схемы, как раньше)

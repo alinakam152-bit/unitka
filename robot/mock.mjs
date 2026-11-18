@@ -58,7 +58,7 @@ export function mockFetch(now) {
       const list = [];
       for (const d of eachDay(from, today)) for (const it of wbItems) {
         const n = salesFor(it, d, 1) + (Math.random() < 0 ? 1 : 0);
-        for (let k = 0; k < n; k++) list.push({ date: d + "T" + String((7 + k * 5 + it.i * 3) % 24).padStart(2, "0") + ":" + String((k * 17) % 60).padStart(2, "0") + ":00", lastChangeDate: d + "T20:00:00", warehouseType: it.i % 5 === 0 && k % 2 ? "Склад продавца" : "Склад WB", nmId: it.sku, supplierArticle: it.offer, subject: it.cat, brand: "Демо", priceWithDisc: it.price, isCancel: k === 3 });
+        for (let k = 0; k < n; k++) list.push({ srid: `demo-${d}-${it.sku}-${k}`, date: d + "T" + String((7 + k * 5 + it.i * 3) % 24).padStart(2, "0") + ":" + String((k * 17) % 60).padStart(2, "0") + ":00", lastChangeDate: d + "T20:00:00", warehouseType: it.i % 5 === 0 && k % 2 ? "Склад продавца" : "Склад WB", nmId: it.sku, supplierArticle: it.offer, subject: it.cat, brand: "Демо", priceWithDisc: it.price, isCancel: k === 3 });
       }
       return ok(list);
     }
@@ -73,8 +73,8 @@ export function mockFetch(now) {
           for (let k = 0; k < n; k++) {
             const isRet = k === 2 && it.i % 3 === 0;
             const sale = it.price, comm = Math.round(sale * it.commRate * 100) / 100, acq = Math.round(sale * 0.02 * 100) / 100;
-            rows.push(wbRow(id++, d, it, isRet ? "Возврат" : "Продажа", { quantity: 1, retailPriceWithDisc: sale, forPay: sale - comm - acq, acquiringFee: acq }));
-            rows.push(wbRow(id++, d, it, "", { deliveryService: it.logi * (isRet ? 2 : 1) }));
+            rows.push(wbRow(id++, d, it, isRet ? "Возврат" : "Продажа", { srid: `demo-${d}-${it.sku}-${k}`, quantity: 1, retailPriceWithDisc: sale, forPay: sale - comm - acq, acquiringFee: acq }));
+            rows.push(wbRow(id++, d, it, "", { srid: `demo-${d}-${it.sku}-${k}`, deliveryService: it.logi * (isRet ? 2 : 1) }));
           }
         }
         if (d.endsWith("5")) rows.push(wbRow(id++, d, null, "", { paidStorage: 1800 }));
@@ -107,22 +107,24 @@ export function mockFetch(now) {
       const posts = [];
       for (const d of eachDay(body.filter.since.slice(0, 10), today)) for (const it of items) {
         const n = salesFor(it, d, salt);
-        for (let k = 0; k < n; k++) posts.push({ in_process_at: d + "T" + String((4 + k * 7 + it.i * 2) % 24).padStart(2, "0") + ":30:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: String(it.price), quantity: 1 }] });
+        for (let k = 0; k < n; k++) posts.push({ posting_number: `demo-${d}-${it.sku}-${salt}-${k}`, in_process_at: d + "T" + String((4 + k * 7 + it.i * 2) % 24).padStart(2, "0") + ":30:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: String(it.price), quantity: 1 }] });
       }
       return ok({ result: { postings: posts, cursor: "", has_next: false } });
     }
+    if (path === "/v1/finance/accrual/types") return ok({ types: [{ id: 501, name: "Кросс-докинг" }, { id: 502, name: "Непредвиденная логистика" }] });
     if (path === "/v1/finance/accrual/by-day") {
       const d = body.date, acc = [];
       for (const it of items) {
         const n = salesFor(it, d, 4);
         for (let k = 0; k < n; k++) {
           const sale = it.price, comm = -Math.round(sale * it.commRate), logi = -it.logi;
-          acc.push({ date: d, accrued_category: "POSTING", total_amount: { amount: String(sale + comm + logi) }, posting: { products: [{ sku: it.sku, quantity: 1, commission: { sale_amount: String(sale), commission: String(comm) }, delivery: { services: [{ type_id: 32, accrued: { amount: String(logi) } }] } }] } });
+          acc.push({ date: d, accrued_category: "POSTING", total_amount: { amount: String(sale + comm + logi) }, posting: { posting_number: `demo-${d}-${it.sku}-3-${k}`, products: [{ sku: it.sku, quantity: 1, commission: { sale_amount: String(sale), commission: String(comm) }, delivery: { services: [{ type_id: 32, accrued: { amount: String(logi) } }] } }] } });
           acc.push({ date: d, accrued_category: "ITEM", total_amount: { amount: String(-Math.round(sale * 0.015)) }, item_fees: { fees: [{ sku: it.sku, fees: [{ type_id: 1, accrued: { amount: String(-Math.round(sale * 0.015)) } }] }] } });
         }
         if (it.heavyAds && it.perDay > 0) acc.push({ date: d, accrued_category: "ITEM", total_amount: { amount: String(-Math.round(it.price * it.perDay * 0.25)) }, item_fees: { fees: [{ sku: it.sku, fees: [{ type_id: 54, accrued: { amount: String(-Math.round(it.price * it.perDay * 0.25)) } }] }] } });
       }
       acc.push({ date: d, accrued_category: "NON_ITEM", total_amount: { amount: "-350" }, non_item_fee: { type_id: 41, accrued: { amount: "-350" } } });
+      acc.push({ date: d, accrued_category: "NON_ITEM", total_amount: "-250", non_item_fee: { type_id: 501, accrued: "-250" } });
       if (d.endsWith("1")) acc.push({ date: d, accrued_category: "NON_ITEM", total_amount: { amount: "-1200" }, non_item_fee: { type_id: 46, accrued: { amount: "-1200" } } });
       return ok({ accruals: acc, last_id: "" });
     }
