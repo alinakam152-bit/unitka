@@ -4,7 +4,7 @@ import { encrypt, decrypt } from "./crypto.mjs";
 import { finAgg, F, OrdAgg, mskParts } from "./lib.mjs";
 import { OrderFinance } from "./order-fin.mjs";
 import { addWbFinRow } from "./wb.mjs";
-import { addOzonAccrual, bucketOf } from "./ozon.mjs";
+import { addOzonAccrual, bucketOf, postingUnitPrice } from "./ozon.mjs";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n++; console.log("✓", name); };
@@ -72,8 +72,8 @@ await t("Заказы: по часам и FBS сходятся с итогом, 
   o.add("2026-11-15", "s:1", 13, true, false, 299, 1);
   o.add("2026-11-15", "s:1", 22, true, true, 299, 1);   // отмена FBS
   const r = o.result();
-  assert.deepEqual(r.orders, [["2026-11-15", "s:1", 4, 1196, 1, 299]]);
-  assert.deepEqual(r.ordersFbs, [["2026-11-15", "s:1", 2, 598, 1, 299]]);
+  assert.deepEqual(r.orders, [["2026-11-15", "s:1", 4, 1196, 1, 299, 0]]);
+  assert.deepEqual(r.ordersFbs, [["2026-11-15", "s:1", 2, 598, 1, 299, 0]]);
   assert.deepEqual(r.ordH, [["2026-11-15", "s:1", 13, 3, 897, 1, 299]]);
 });
 await t("Ozon: время по Гринвичу переводится в московское (и день тоже)", async () => {
@@ -103,5 +103,19 @@ await t("Внутренняя логистика выделена из дост�
   assert.equal(r[F.serviceLogi], 80);
   assert.equal(r[F.logi], 0);
   assert.equal(r[F.pay], -80);
+});
+await t("Цена заказа Ozon из денежного объекта, строки или финансовых данных по SKU", () => {
+  assert.equal(postingUnitPrice({ sku: 12, price: { amount: "299.50", currency: "RUB" } }, {}), 299.5);
+  assert.equal(postingUnitPrice({ sku: 12, price: "799" }, {}), 799);
+  const posting = { financial_data: { products: [{ product_id: 99, price: 100 }, { product_id: 12, price: { amount: 350 } }] } };
+  assert.equal(postingUnitPrice({ sku: 12 }, posting), 350);
+  assert.equal(postingUnitPrice({ sku: 12, price: { amount: 30, currency: "USD" } }, {}), null);
+  assert.equal(postingUnitPrice({ sku: 13 }, posting), null);
+});
+await t("Без цены: штуки сохраняются, отмены не входят в число заказов без цены", () => {
+  const orders = new OrdAgg();
+  orders.add("2026-11-11", "s:1", 12, true, false, null, 2);
+  orders.add("2026-11-11", "s:1", 12, true, true, null, 1);
+  assert.deepEqual(orders.result().ordersFbs, [["2026-11-11", "s:1", 3, 0, 1, 0, 2]]);
 });
 console.log(`\nВсе проверки пройдены: ${n}`);

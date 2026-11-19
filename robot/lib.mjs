@@ -75,13 +75,13 @@ export class Agg {
 export const finAgg = () => new Agg(FIN_FIELDS.length);
 
 // Заказы подробно: по дням (все и отдельно FBS) и по часам. День и час — по Москве, как у площадок.
-//   orders    — [день, товар, шт, ₽, отменено шт, отменено ₽]        (все схемы, как раньше)
+//   orders    — [день, товар, шт, ₽, отменено шт, отменено ₽, без цены шт]        (все схемы, как раньше)
 //   ordersFbs — то же только по FBS (FBO = orders − ordersFbs)
 //   ordH      — [день, товар, час 0–23, шт, ₽, из них FBS шт, FBS ₽] (без отмен)
 export class OrdAgg {
-  constructor() { this.all = new Agg(4); this.fbs = new Agg(4); this.h = new Map(); }
+  constructor() { this.all = new Agg(5); this.fbs = new Agg(5); this.h = new Map(); }
   add(day, pid, hour, fbs, cancel, price, qty = 1) {
-    const v = cancel ? { 2: qty, 3: price * qty, 4: qty, 5: price * qty } : { 2: qty, 3: price * qty };
+    const v = cancel ? { 2: qty, 3: price * qty, 4: qty, 5: price * qty } : { 2: qty, 3: price * qty, 6: price == null ? qty : 0 };
     this.all.add(day, pid, v);
     if (fbs) this.fbs.add(day, pid, v);
     if (cancel || !(hour >= 0 && hour < 24)) return;

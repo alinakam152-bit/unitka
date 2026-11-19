@@ -20,6 +20,19 @@ for (const [k, ids] of Object.entries(T)) for (const id of ids) BUCKET.set(id, F
 // Всё остальное (подписки, сервисы и т.п.) — в «штрафы и прочие удержания».
 export const bucketOf = (typeId) => BUCKET.get(typeId) ?? F.pen;
 
+// Новые ответы Ozon могут передавать деньги объектом amount/currency.
+export function postingUnitPrice(product, posting, financialBySku) {
+  const lines = financialBySku ?? new Map((posting.financial_data?.products || []).map((row) => [String(row.sku ?? row.product_id), row]));
+  const financial = lines.get(String(product.sku ?? product.product_id));
+  for (const [value, line] of [[product.price, product], [financial?.price, financial], [financial?.customer_price, financial], [financial?.client_price, financial]]) {
+    const currency = value?.currency ?? value?.currency_code ?? line?.currency ?? line?.currency_code;
+    if (currency && !["RUB", "RUR"].includes(String(currency).toUpperCase())) continue;
+    const amount = amt(value);
+    if (amount > 0) return amount;
+  }
+  return null;
+}
+
 export async function collectOzon(store, clientId, apiKey, { http, log, now = new Date(), finDays = 90, orderDays = 60 }) {
   const headers = { "Client-Id": clientId, "Api-Key": apiKey };
   const post = (path, body) => http(HOST + path, { method: "POST", headers, body });
@@ -78,15 +91,19 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   log("  заказы");
   const ord = new OrdAgg(), orderFin = new OrderFinance();
   const since = daysAgo(orderDays, now) + "T00:00:00.000Z", to = new Date(now).toISOString();
+  let unpriced = 0;
   const addPosting = (p, fbs) => {
     const { day: d, hour } = mskParts(p.in_process_at || p.created_at);
     const cancelled = p.status === "cancelled";
+    const prices = new Map((p.financial_data?.products || []).map((row) => [String(row.sku ?? row.product_id), row]));
     for (const it of p.products || []) {
       const q = num(it.quantity);
       const sku = String(it.sku);
       const id = prod.get(sku)?.pid ?? pid(sku);
-      if (orderFin.order(p.posting_number, id, d, fbs, cancelled, num(it.price), q)) continue;
-      ord.add(d, id, hour, fbs, cancelled, num(it.price), q);
+      const price = postingUnitPrice(it, p, prices);
+      if (orderFin.order(p.posting_number, id, d, fbs, cancelled, price, q)) continue;
+      if (!cancelled && price == null) unpriced += q;
+      ord.add(d, id, hour, fbs, cancelled, price, q);
       if (!prod.has(sku)) prod.set(sku, { pid: pid(sku), store: store.id, mp: "ozon", sku, offerId: it.offer_id || "", name: it.name || sku, category: "", photo: "", price: null });
     }
   };
@@ -95,7 +112,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   const listAll = async (path, label, fbs) => {
     let cursor = "", pages = 0;
     for (let guard = 0; guard < 3000; guard++) { // Ozon отдаёт максимум 100 отправлений за раз
-      const res = await post(path, { filter: { since, to }, limit: 100, cursor, sort_dir: "ASC", with: { analytics_data: false, financial_data: false } });
+      const res = await post(path, { filter: { since, to }, limit: 100, cursor, sort_dir: "ASC", with: { analytics_data: false, financial_data: true } });
       const r = res?.result ?? res ?? {};
       const list = Array.isArray(r) ? r : r.postings || res?.postings || [];
       list.forEach((p) => addPosting(p, fbs)); pages++;
@@ -108,6 +125,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   };
   try { await listAll("/v3/posting/fbo/list", "FBO", false); } catch (e) { warnings.push(`Заказы FBO Ozon: ${e.message}`); }
   try { await listAll("/v4/posting/fbs/list", "FBS", true); } catch (e) { warnings.push(`Заказы FBS Ozon: ${e.message}`); }
+  if (unpriced) warnings.push(`Ozon: без цены в ответе API — ${unpriced} шт. Прогноз по таким товарам неполный.`);
   Object.assign(out, ord.result());
 
   // 4. Начисления по дням (финансы)

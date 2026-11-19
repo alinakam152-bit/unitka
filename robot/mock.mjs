@@ -107,7 +107,7 @@ export function mockFetch(now) {
       const posts = [];
       for (const d of eachDay(body.filter.since.slice(0, 10), today)) for (const it of items) {
         const n = salesFor(it, d, salt);
-        for (let k = 0; k < n; k++) posts.push({ posting_number: `demo-${d}-${it.sku}-${salt}-${k}`, in_process_at: d + "T" + String((4 + k * 7 + it.i * 2) % 24).padStart(2, "0") + ":30:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: String(it.price), quantity: 1 }] });
+        for (let k = 0; k < n; k++) posts.push({ posting_number: `demo-${d}-${it.sku}-${salt}-${k}`, in_process_at: d + "T" + String((4 + k * 7 + it.i * 2) % 24).padStart(2, "0") + ":30:00Z", status: k === 2 ? "cancelled" : "delivered", products: [{ sku: it.sku, offer_id: it.offer, price: { amount: String(it.price), currency: "RUB" }, quantity: 1 }] });
       }
       return ok({ result: { postings: posts, cursor: "", has_next: false } });
     }
