@@ -1087,7 +1087,10 @@
   }
 
   // ================= РНП =================
-  function renderRnp() {
+  function renderRnp(parts, q) {
+    const products = D.products.filter((p) => storeOk(p.pid))
+      .sort((a, b) => String(a.offerId || a.sku).localeCompare(String(b.offerId || b.sku), "ru", { numeric: true }));
+    const product = products.find((p) => p.pid === q.get("product"));
     const dates = Array.from({ length: 14 }, (_, i) => addDays(IX.today, i - 13));
     const byDate = new Map(dates.map((date) => [date, new Map()]));
     const totals = {};
@@ -1099,7 +1102,7 @@
     function collect(rows, values) {
       for (const row of rows) {
         const stores = byDate.get(row[0]);
-        if (!stores || !storeOk(row[1])) continue;
+        if (!stores || !storeOk(row[1]) || (product && row[1] !== product.pid)) continue;
         const id = storeOf(row[1]);
         if (!stores.has(id)) stores.set(id, {});
         add(stores.get(id), values(row));
@@ -1133,15 +1136,15 @@
       add(totals, day);
       return day;
     });
-    for (const p of D.products) {
-      if (!storeOk(p.pid)) continue;
+    for (const p of product ? [product] : products) {
       const stock = stockOf(p.pid);
       if (stock != null) add(totals, { stock, inStock: Number(stock > 0), listed: 1 });
     }
     const ratio = (a, b) => a != null && b > 0 ? a / b : null;
     const rows = [
       ["Продажи и остатки", [
-        ["Продажи, ₽", (c) => c.sales], ["Заказы, шт.", (c) => c.orders],
+        ["Заказы, ₽", (c) => c.unpriced ? null : c.orderSum], ["Продажи, ₽", (c) => c.sales],
+        ["Заказы, шт.", (c) => c.orders],
         ["Продажи, шт.", (c) => c.units], ["Средняя цена заказа, ₽", (c) => c.unpriced ? null : ratio(c.orderSum, c.orders)],
         ["Цена для покупателя, ₽"], ["Соинвест, %"], ["Товары в пути, шт."],
         ["Доступно к продаже, шт.", (c) => c.stock],
@@ -1182,6 +1185,13 @@
       ${demoNote()}
       <div class="head-row"><h1>РНП</h1></div>
       ${storeChips()}
+      <label class="rnp-product">Артикул
+        <select id="rnp-product">
+          <option value="">Все артикулы</option>
+          ${products.map((p) => `<option value="${esc(p.pid)}"${p === product ? " selected" : ""}>${esc(p.offerId || p.sku || p.pid)} · ${esc(p.name || "")} · ${esc(storeName(storeOf(p.pid)))}</option>`).join("")}
+        </select>
+      </label>
+      ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
       <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Последние дни могут быть неполными.</p>
       <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
         <table class="rnp-table" aria-label="РНП за 14 дней">
@@ -1190,7 +1200,13 @@
           ${rows.map(([label, items]) => `<tbody><tr class="rnp-section"><th scope="rowgroup">${label}</th><td class="rnp-total"></td><td colspan="${dates.length}"></td></tr>${items.map(rowHtml).join("")}</tbody>`).join("")}
         </table>
       </div>
-      <p class="muted small">Прочерк — данных нет. Остатки в итоговом столбце — последний доступный снимок. Заказы показаны без отмен, продажи — за вычетом возвратов. Для ДРР берутся дни и магазины, где есть и расходы на рекламу, и сумма заказов или продаж. Красный цвет — ДРР выше порога в настройках.</p>`;
+      <p class="muted small">Прочерк — данных нет. Остатки в итоговом столбце — последний доступный снимок. Заказы показаны без отмен, продажи — за вычетом возвратов. Для ДРР берутся дни, где есть и расходы на рекламу, и сумма заказов или продаж. Красный цвет — ДРР выше порога в настройках.${product ? " Общие расходы без артикула показаны в сводке по магазину." : ""}</p>`;
+    app.querySelector("#rnp-product").addEventListener("change", (e) => {
+      const value = e.target.value;
+      if (value) q.set("product", value);
+      else q.delete("product");
+      location.hash = "#/rnp" + (q.size ? "?" + q : "");
+    });
   }
 
   // ================= Настройки =================
