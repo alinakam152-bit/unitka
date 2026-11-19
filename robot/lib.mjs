@@ -78,12 +78,17 @@ export const finAgg = () => new Agg(FIN_FIELDS.length);
 //   orders    — [день, товар, шт, ₽, отменено шт, отменено ₽, без цены шт]        (все схемы, как раньше)
 //   ordersFbs — то же только по FBS (FBO = orders − ordersFbs)
 //   ordH      — [день, товар, час 0–23, шт, ₽, из них FBS шт, FBS ₽] (без отмен)
+//   orderPrices — [день, товар, шт с парой цен, сумма по цене продавца, сумма по цене покупателя]
 export class OrdAgg {
-  constructor() { this.all = new Agg(5); this.fbs = new Agg(5); this.h = new Map(); }
-  add(day, pid, hour, fbs, cancel, price, qty = 1) {
+  constructor() { this.all = new Agg(5); this.fbs = new Agg(5); this.h = new Map(); this.prices = new Agg(3); }
+  add(day, pid, hour, fbs, cancel, price, qty = 1, pair = null) {
     const v = cancel ? { 2: qty, 3: price * qty, 4: qty, 5: price * qty } : { 2: qty, 3: price * qty, 6: price == null ? qty : 0 };
     this.all.add(day, pid, v);
     if (fbs) this.fbs.add(day, pid, v);
+    if (!cancel && qty > 0 && pair && Number.isFinite(pair.seller) && Number.isFinite(pair.buyer)
+      && pair.seller > 0 && pair.buyer > 0 && pair.buyer <= pair.seller) {
+      this.prices.add(day, pid, { 2: qty, 3: pair.seller * qty, 4: pair.buyer * qty });
+    }
     if (cancel || !(hour >= 0 && hour < 24)) return;
     const k = day + "|" + pid + "|" + hour;
     const r = this.h.get(k) || [day, pid, hour, 0, 0, 0, 0];
@@ -91,7 +96,7 @@ export class OrdAgg {
     this.h.set(k, r);
   }
   result() {
-    return { orders: this.all.rows(), ordersFbs: this.fbs.rows(),
+    return { orders: this.all.rows(), ordersFbs: this.fbs.rows(), orderPrices: this.prices.rows(),
       ordH: [...this.h.values()].map((r) => r.map((v, i) => (i < 3 ? v : r2(v)))).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[2] - b[2])) };
   }
 }

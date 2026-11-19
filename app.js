@@ -1112,6 +1112,7 @@
       orders: r[2] - r[4], orderSum: r[3] - r[5],
       unpriced: r[6] ?? (r[3] === 0 && IX.prod.get(r[1])?.mp === "ozon" ? r[2] - r[4] : 0)
     }));
+    collect(D.orderPrices || [], (r) => ({ pairedQty: r[2], sellerAmount: r[3], buyerAmount: r[4] }));
     collect(D.fin, (r) => {
       const store = IX.stores.get(storeOf(r[1]));
       const covered = store?.finTo && r[0] <= store.finTo;
@@ -1146,7 +1147,9 @@
         ["Заказы, ₽", (c) => c.unpriced ? null : c.orderSum], ["Продажи, ₽", (c) => c.sales],
         ["Заказы, шт.", (c) => c.orders],
         ["Продажи, шт.", (c) => c.units], ["Средняя цена заказа, ₽", (c) => c.unpriced ? null : ratio(c.orderSum, c.orders)],
-        ["Цена для покупателя, ₽"], ["Соинвест, %"], ["Товары в пути, шт."],
+        ["Цена для покупателя, ₽", (c) => ratio(c.buyerAmount, c.pairedQty), money2],
+        ["Соинвест, %", (c) => ratio(c.sellerAmount - c.buyerAmount, c.sellerAmount), pct],
+        ["Товары в пути, шт."],
         ["Доступно к продаже, шт.", (c) => c.stock],
         ["Артикулы в наличии / с данными", (c) => c.listed ? `${int(c.inStock)} / ${int(c.listed)}` : null],
         ["Среднее время доставки"], ["Оборачиваемость, дни"]
@@ -1193,6 +1196,7 @@
       </label>
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
       <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Последние дни могут быть неполными.</p>
+      <p class="muted small">Цена покупателя и соинвест рассчитаны по ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт. с обеими ценами. Соинвест = разница между суммами по ценам продавца и покупателя ÷ сумма по ценам продавца. Для WB цена покупателя показана без скидки за оплату WB Кошельком.</p>
       <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
         <table class="rnp-table" aria-label="РНП за 14 дней">
           <thead><tr><th scope="col">Показатель</th><th scope="col" class="rnp-total">За период</th>${dates.map((date) =>

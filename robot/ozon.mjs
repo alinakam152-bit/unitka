@@ -21,16 +21,28 @@ for (const [k, ids] of Object.entries(T)) for (const id of ids) BUCKET.set(id, F
 export const bucketOf = (typeId) => BUCKET.get(typeId) ?? F.pen;
 
 // Новые ответы Ozon могут передавать деньги объектом amount/currency.
+function priceInRubles(value, line) {
+  const currency = value?.currency ?? value?.currency_code ?? line?.currency ?? line?.currency_code;
+  if (currency && !["RUB", "RUR"].includes(String(currency).toUpperCase())) return null;
+  const amount = amt(value);
+  return amount > 0 ? amount : null;
+}
+
 export function postingUnitPrice(product, posting, financialBySku) {
   const lines = financialBySku ?? new Map((posting.financial_data?.products || []).map((row) => [String(row.sku ?? row.product_id), row]));
   const financial = lines.get(String(product.sku ?? product.product_id));
   for (const [value, line] of [[product.price, product], [financial?.price, financial], [financial?.customer_price, financial], [financial?.client_price, financial]]) {
-    const currency = value?.currency ?? value?.currency_code ?? line?.currency ?? line?.currency_code;
-    if (currency && !["RUB", "RUR"].includes(String(currency).toUpperCase())) continue;
-    const amount = amt(value);
-    if (amount > 0) return amount;
+    const amount = priceInRubles(value, line);
+    if (amount !== null) return amount;
   }
   return null;
+}
+
+export function postingPricePair(product, financial) {
+  return {
+    seller: priceInRubles(product.price, product),
+    buyer: priceInRubles(financial?.client_price, financial) ?? priceInRubles(financial?.customer_price, financial)
+  };
 }
 
 export async function collectOzon(store, clientId, apiKey, { http, log, now = new Date(), finDays = 90, orderDays = 60 }) {
@@ -103,7 +115,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
       const price = postingUnitPrice(it, p, prices);
       if (orderFin.order(p.posting_number, id, d, fbs, cancelled, price, q)) continue;
       if (!cancelled && price == null) unpriced += q;
-      ord.add(d, id, hour, fbs, cancelled, price, q);
+      ord.add(d, id, hour, fbs, cancelled, price, q, postingPricePair(it, prices.get(sku)));
       if (!prod.has(sku)) prod.set(sku, { pid: pid(sku), store: store.id, mp: "ozon", sku, offerId: it.offer_id || "", name: it.name || sku, category: "", photo: "", price: null });
     }
   };

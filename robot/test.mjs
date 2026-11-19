@@ -4,10 +4,30 @@ import { encrypt, decrypt } from "./crypto.mjs";
 import { finAgg, F, OrdAgg, mskParts } from "./lib.mjs";
 import { OrderFinance } from "./order-fin.mjs";
 import { addWbFinRow } from "./wb.mjs";
-import { addOzonAccrual, bucketOf, postingUnitPrice } from "./ozon.mjs";
+import { addOzonAccrual, bucketOf, postingUnitPrice, postingPricePair } from "./ozon.mjs";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n++; console.log("✓", name); };
+
+await t("две цены Ozon: отдельные поля, рубли и пропуски", () => {
+  const product = { price: { amount: "279", currency: "RUB" } };
+  assert.deepEqual(postingPricePair(product, { client_price: "262" }), { seller: 279, buyer: 262 });
+  assert.deepEqual(postingPricePair(product, { customer_price: { amount: 250, currency: "RUB" } }), { seller: 279, buyer: 250 });
+  assert.deepEqual(postingPricePair({}, { client_price: "262" }), { seller: null, buyer: 262 });
+  assert.equal(postingPricePair(product, { client_price: { amount: 3, currency: "USD" } }).buyer, null);
+});
+
+await t("две цены: суммы взвешены по штукам, отмены и неполные пары исключены", () => {
+  const orders = new OrdAgg();
+  const day = "2026-11-19";
+  orders.add(day, "s:1", 10, false, false, 279, 2, { seller: 279, buyer: 262 });
+  orders.add(day, "s:1", 11, true, false, 100, 1, { seller: 100, buyer: 100 });
+  orders.add(day, "s:1", 12, true, true, 279, 4, { seller: 279, buyer: 250 });
+  orders.add(day, "s:1", 13, false, false, 279, 1, { seller: 279, buyer: 0 });
+  orders.add(day, "s:1", 14, false, false, 279, 1, { seller: 279, buyer: 280 });
+  assert.deepEqual(orders.result().orderPrices, [[day, "s:1", 3, 658, 624]]);
+  assert.deepEqual(orders.result().orders, [[day, "s:1", 9, 2332, 4, 1116, 0]]);
+});
 
 await t("шифрование: правильная фраза расшифровывает", async () => {
   const enc = await encrypt({ a: 1, b: "тест" }, "длинная тестовая фраза");

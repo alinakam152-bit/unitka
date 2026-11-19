@@ -69,7 +69,8 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
       if (o.srid && seenOrders.has(o.srid)) continue;
       if (o.srid) seenOrders.add(o.srid);
       orderFin.order(o.srid, pid(o.nmId), d, fbs, !!o.isCancel, num(o.priceWithDisc));
-      ord.add(d, pid(o.nmId), hour, fbs, !!o.isCancel, num(o.priceWithDisc));
+      const seller = num(o.priceWithDisc);
+      ord.add(d, pid(o.nmId), hour, fbs, !!o.isCancel, seller, 1, { seller, buyer: num(o.finishedPrice) });
       if (!prod.has(o.nmId)) prod.set(o.nmId, { pid: pid(o.nmId), store: store.id, mp: "wb", sku: String(o.nmId), offerId: o.supplierArticle || "", name: [o.brand, o.subject].filter(Boolean).join(" "), category: o.subject || "", photo: "", price: null });
     }
     if (list.length < 80000) break;
