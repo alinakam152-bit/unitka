@@ -220,7 +220,7 @@
     const { parts, q } = route();
     const page = parts[0] || "home";
     nav.querySelectorAll("a").forEach((a) => a.classList.toggle("on", a.dataset.nav === (page === "item" ? "profit" : page)));
-    const fn = { home: renderHome, orders: renderOrders, products: renderProducts, profit: renderProfit, item: renderItem, report: renderReport, settings: renderSettings }[page] || renderHome;
+    const fn = { home: renderHome, orders: renderOrders, products: renderProducts, profit: renderProfit, item: renderItem, report: renderReport, rnp: renderRnp, settings: renderSettings }[page] || renderHome;
     fn(parts, q);
   }
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
@@ -1084,6 +1084,113 @@
       <span class="b-pr ${c.t.profit < 0 ? "neg" : ""}" style="height:${(Math.abs(c.t.profit) / max) * 100}%" title="Прибыль ${rub(c.t.profit)}"></span></div>
       <span class="bar-l">${esc(c.label.replace(/ \d{4} г\.$/, ""))}</span></div>`).join("")}</div>
       <div class="bar-legend"><span><i class="b-rev"></i>Выручка</span><span><i class="b-pr"></i>Чистая прибыль</span></div>`;
+  }
+
+  // ================= РНП =================
+  function renderRnp() {
+    const dates = Array.from({ length: 14 }, (_, i) => addDays(IX.today, i - 13));
+    const byDate = new Map(dates.map((date) => [date, new Map()]));
+    const totals = {};
+    function add(target, values) {
+      for (const [metric, value] of Object.entries(values)) {
+        if (Number.isFinite(value)) target[metric] = (target[metric] ?? 0) + value;
+      }
+    }
+    function collect(rows, values) {
+      for (const row of rows) {
+        const stores = byDate.get(row[0]);
+        if (!stores || !storeOk(row[1])) continue;
+        const id = storeOf(row[1]);
+        if (!stores.has(id)) stores.set(id, {});
+        add(stores.get(id), values(row));
+      }
+    }
+    collect(D.orders, (r) => ({
+      orders: r[2] - r[4], orderSum: r[3] - r[5],
+      unpriced: r[6] ?? (r[3] === 0 && IX.prod.get(r[1])?.mp === "ozon" ? r[2] - r[4] : 0)
+    }));
+    collect(D.fin, (r) => {
+      const store = IX.stores.get(storeOf(r[1]));
+      const covered = store?.finTo && r[0] <= store.finTo;
+      return {
+        sales: covered ? r[F.rev] : null,
+        units: covered ? r[F.sold] - r[F.ret] : null,
+        spend: covered && store.mp === "ozon" ? r[F.ads] ?? 0 : null
+      };
+    });
+    collect(D.ads || [], (r) => ({ impressions: r[3], clicks: r[4], wbSpend: r[2], spend: r[2] }));
+    const columns = dates.map((date) => {
+      const day = {};
+      for (const store of byDate.get(date).values()) {
+        add(day, store);
+        if (store.spend != null && store.orderSum != null && !store.unpriced) {
+          add(day, { orderSpend: store.spend, matchedOrders: store.orderSum });
+        }
+        if (store.spend != null && store.sales != null) {
+          add(day, { salesSpend: store.spend, matchedSales: store.sales });
+        }
+      }
+      add(totals, day);
+      return day;
+    });
+    for (const p of D.products) {
+      if (!storeOk(p.pid)) continue;
+      const stock = stockOf(p.pid);
+      if (stock != null) add(totals, { stock, inStock: Number(stock > 0), listed: 1 });
+    }
+    const ratio = (a, b) => a != null && b > 0 ? a / b : null;
+    const rows = [
+      ["Продажи и остатки", [
+        ["Продажи, ₽", (c) => c.sales], ["Заказы, шт.", (c) => c.orders],
+        ["Продажи, шт.", (c) => c.units], ["Средняя цена заказа, ₽", (c) => c.unpriced ? null : ratio(c.orderSum, c.orders)],
+        ["Цена для покупателя, ₽"], ["Соинвест, %"], ["Товары в пути, шт."],
+        ["Доступно к продаже, шт.", (c) => c.stock],
+        ["Артикулы в наличии / с данными", (c) => c.listed ? `${int(c.inStock)} / ${int(c.listed)}` : null],
+        ["Среднее время доставки"], ["Оборачиваемость, дни"]
+      ]],
+      ["Воронка", [
+        ["Средняя позиция в поиске"], ["Частота показов"], ["Уникальные посетители"],
+        ["Добавления в корзину"], ["CTR общий, %"], ["CR в корзину, %"],
+        ["CR в заказ, %"], ["CR показы → заказы, %"], ["Доля некатегорийного трафика, %"],
+        ["Выкуп за день, %"], ["Выкуп за месяц, %"]
+      ]],
+      ["Реклама", [
+        ["Показы · WB", (c) => c.impressions], ["Клики · WB", (c) => c.clicks],
+        ["CTR · WB, %", (c) => ratio(c.clicks, c.impressions), pct],
+        ["CPC · WB, ₽", (c) => ratio(c.wbSpend, c.clicks), money2],
+        ["Расход · WB, ₽", (c) => c.wbSpend],
+        ["Реклама итого, ₽", (c) => c.spend, int, "emphasis"],
+        ["ДРР от заказов, %", (c) => ratio(c.orderSpend, c.matchedOrders), pct, "drr"],
+        ["ДРР от продаж, %", (c) => ratio(c.salesSpend, c.matchedSales), pct, "drr"]
+      ]]
+    ];
+    function money2(value) {
+      return value == null ? "—" : value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    }
+    function rowHtml([label, value = () => null, format = int, kind = ""]) {
+      function cell(column, total = false) {
+        const v = value(column);
+        const tone = kind === "drr" && v != null
+          ? (v > state.thresholds.drr / 100 ? " rnp-high" : " rnp-good")
+          : "";
+        return `<td class="${total ? "rnp-total" : ""}${tone}">${typeof v === "string" ? v : format(v)}</td>`;
+      }
+      return `<tr class="rnp-${kind}"><th scope="row">${label}</th>${cell(totals, true)}${columns.map((c) => cell(c)).join("")}</tr>`;
+    }
+    const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short", timeZone: "UTC" });
+    app.innerHTML = `
+      ${demoNote()}
+      <div class="head-row"><h1>РНП</h1></div>
+      ${storeChips()}
+      <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Последние дни могут быть неполными.</p>
+      <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
+        <table class="rnp-table" aria-label="РНП за 14 дней">
+          <thead><tr><th scope="col">Показатель</th><th scope="col" class="rnp-total">За период</th>${dates.map((date) =>
+            `<th scope="col"><time datetime="${date}">${dm(date)}.${date.slice(2, 4)}</time><span>${weekday.format(new Date(date))}</span></th>`).join("")}</tr></thead>
+          ${rows.map(([label, items]) => `<tbody><tr class="rnp-section"><th scope="rowgroup">${label}</th><td class="rnp-total"></td><td colspan="${dates.length}"></td></tr>${items.map(rowHtml).join("")}</tbody>`).join("")}
+        </table>
+      </div>
+      <p class="muted small">Прочерк — данных нет. Остатки в итоговом столбце — последний доступный снимок. Заказы показаны без отмен, продажи — за вычетом возвратов. Для ДРР берутся дни и магазины, где есть и расходы на рекламу, и сумма заказов или продаж. Красный цвет — ДРР выше порога в настройках.</p>`;
   }
 
   // ================= Настройки =================
