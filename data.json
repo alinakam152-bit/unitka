@@ -1,34 +1,34 @@
 {
   "rates": {
-    "date": "2026-11-18",
+    "date": "2026-11-19",
     "source": "ЦБ РФ (cbr-xml-daily.ru)",
     "items": [
       {
         "code": "CNY",
         "name": "Юань",
-        "value": 12.3419,
-        "previous": 12.3472,
-        "change": -0.0053
+        "value": 12.3004,
+        "previous": 12.3419,
+        "change": -0.0415
       },
       {
         "code": "USD",
         "name": "Доллар",
-        "value": 82.4529,
-        "previous": 82.5143,
-        "change": -0.0614
+        "value": 82.2281,
+        "previous": 82.4529,
+        "change": -0.2248
       },
       {
         "code": "EUR",
         "name": "Евро",
-        "value": 90.8136,
-        "previous": 91.1948,
-        "change": -0.3812
+        "value": 90.3605,
+        "previous": 90.8136,
+        "change": -0.4531
       }
     ]
   },
   "checked": {
-    "rates": "2026-11-18T14:51+05:00",
-    "news": "2026-11-18T14:51+05:00"
+    "rates": "2026-11-19T08:46+05:00",
+    "news": "2026-11-19T08:46+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -41,13 +41,13 @@
             "title": "Селлерам Wildberries запретили поставки почти на все склады",
             "source": "Вёрстка",
             "link": "https://news.google.com/rss/articles/CBMiigFBVV95cUxQeEZTRVVOa1lpdzk1OVJ4ZFVKcjlzSmJsUGZYMEVneFVYaTdfQ001LVRZVFdLS1RiSUxkaVJET2VPSTV4R2hMRWsyb042NGw1bE9kdGtURW4xRUFxSWY5MkpDM2VRWXZ0cFJYNUtpRWNkLVJZakx5dk5NbXBhTjJ3VEszcFJuWTFNZ1E?oc=5",
-            "date": "2026-11-17T20:32+05:00"
+            "date": "2026-11-18T21:00+05:00"
           },
           {
             "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
             "source": "Sostav.ru",
             "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
-            "date": "2026-11-16T13:00+05:00"
+            "date": "2026-11-17T23:51+05:00"
           },
           {
             "title": "Пострадавшие селлеры Wildberries из Татарстана оказались на грани банкротства",
@@ -62,10 +62,10 @@
         "label": "Ozon",
         "items": [
           {
-            "title": "Власти уточнили порядок поддержки продавцов Озона и Wildberries после атак",
-            "source": "БКС Экспресс",
-            "link": "https://news.google.com/rss/articles/CBMi0AFBVV95cUxOa21GVmU3UGoteDZ1d1hpM3p2MXRqNXlraUhoelRkQmNNOVNQTk9xR1R5czJzVWFvVWowamV3OWwzUmRzVS1rbzBwd2ZBSHFrLTBfZ2RsLWZSbmVqNnpablZxSmhFV01kcDc4ZTZMMDdYZS1oZFN4YkNkTEJRMXZYOVI4WERWUmxfNUFBSFFRWjNSM2hwX2hRYzJOLUlCbWNBYWV4dlg5eEVWckVxOXJxLUVELXEtMXFIbHRmTFZKSFEybjhRcmZMaUFKTDNxbVRN?oc=5",
-            "date": "2026-11-13T14:22+05:00"
+            "title": "Смартфоны и электроника станут дороже, а Ozon изменит вознаграждение продавцов: что ждет бизнес в декабре 2026 года",
+            "source": "Банки.ру",
+            "link": "https://news.google.com/rss/articles/CBMiW0FVX3lxTE1DVzJ6Rlo0WTA2a1RkN3l5Rzh1bHlkVm95QkFwZU1oUU9KT1NaNndHYVBubWZuSmxxQVlyVzFmZ3hoRjl3akp4dmNhdEVEMW52WjhyUndzbGdHSWc?oc=5",
+            "date": "2026-11-18T23:00+05:00"
           },
           {
             "title": "Эксперты спрогнозировали подорожание товаров на Ozon из-за новой системы штрафов для продавцов",
@@ -83,6 +83,6 @@
       }
     ]
   },
-  "updated_at": "2026-11-18T14:51+05:00",
+  "updated_at": "2026-11-19T08:46+05:00",
   "errors": []
 }
