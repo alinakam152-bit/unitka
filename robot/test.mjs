@@ -4,10 +4,61 @@ import { encrypt, decrypt } from "./crypto.mjs";
 import { finAgg, F, OrdAgg, mskParts } from "./lib.mjs";
 import { OrderFinance } from "./order-fin.mjs";
 import { addWbFinRow } from "./wb.mjs";
-import { addOzonAccrual, bucketOf, postingUnitPrice, postingPricePair } from "./ozon.mjs";
+import { addOzonAccrual, bucketOf, postingUnitPrice, postingPricePair, ozonOrderReport } from "./ozon.mjs";
+import reports from "../rnp-data.js";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n++; console.log("✓", name); };
+
+await t("отчёт Ozon: новый заголовок, Москва, сравнимые пары, повторы и доставка", () => {
+  const raw = [
+    "Номер отправления;Принят в обработку;Статус;SKU;Артикул;Предельная цена;Оплачено покупателем;Количество;Дата доставки;Имя покупателя",
+    "a;2026-11-18 22:00:00;Доставлен;1;sku-1;300,00;240,00;2;2026-11-20 22:00:00;не хранить",
+    "a;2026-11-18 22:00:00;Доставлен;1;sku-1;300;240;2;2026-11-20 22:00:00;повтор",
+    "b;2026-11-19 08:00:00;Отменён;1;sku-1;400;320;1;;",
+    "c;2026-11-19 09:00:00;В пути;1;sku-1;300;330;1;;"
+  ].join("\r\n");
+  const data = reports.parseOzonReport(reports.parseCsv(raw), (sku) => "s:" + sku);
+  assert.equal(data.invalidPrices, 1);
+  assert.deepEqual(data.rows, [["2026-11-19", "s:1", { orders: 3, knownOrderPrices: 3, reportSellerAmount: 900,
+    pairedQty: 2, sellerAmount: 600, buyerAmount: 480, delivered: 2, deliveryDays: 4, deliveryUnits: 2, cancelled: 1 }]]);
+  assert.deepEqual(reports.bestPriceRows([["2026-11-19", "s:1", 1, 300, 260]], data.rows), [["2026-11-19", "s:1", 2, 600, 480]]);
+});
+
+await t("отчёт Ozon: формируем, ждём появления файла и не передаём реквизиты при загрузке", async () => {
+  const times = [], now = new Date("2026-11-20T10:00:00Z");
+  const post = async (path, body) => {
+    times.push(path);
+    if (path.endsWith("create")) {
+      assert.deepEqual(body.filter.delivery_schema, ["fbo", "fbs"]);
+      return { result: { code: "report" } };
+    }
+    return times.length === 2 ? { result: { status: "waiting" } } :
+      { result: { status: "success", file: "https://cdn.ozon.ru/report.csv" } };
+  };
+  const file = async (url, options) => {
+    assert.equal(url.hostname, "cdn.ozon.ru");
+    assert.equal(options.headers, undefined);
+    return new Response("Номер отправления;Принят в обработку;Статус;SKU;Ваша цена;Оплачено покупателем;Количество\na;2026-11-19;Доставлен;1;100;80;1");
+  };
+  const data = await ozonOrderReport(post, file, () => "s:1", now, 0);
+  assert.equal(data.rows[0][2].buyerAmount, 80);
+  assert.equal(times.length, 3);
+});
+
+await t("РНП: Техлист сопоставляет артикулы, Unit сохраняет точные ставки группы", () => {
+  const metrics = reports.parseRnpMetrics([
+    ["Дата", "Артикул", "Артикул продавца", "Общее название", "Заказы, шт.", "Всего показов", "УНИКИ"],
+    [46345, "778", "Вася", "Группа", 4, 100, 75]
+  ], (sku) => sku === "778" ? "s:1" : null);
+  assert.deepEqual(metrics.rows, [["2026-11-19", "s:1", { listedOrders: 4, views: 100, visitors: 75, funnelOrders: 4 }]]);
+  assert.deepEqual(metrics.aliases, { Группа: ["s:1"] });
+  const inputs = reports.parseRnpInputs([
+    ["Наименование товара", "Полная себестоимость, ₽", "Комиссия Ozon, %", "Тариф логистики, ₽", "% выкупа"],
+    ["Группа", 80, 0.52, 116.258, "85,79%"]
+  ], (sku, offer, name) => metrics.aliases[name]);
+  assert.deepEqual(inputs.rows, [["s:1", { commission: 52, logistics: 116.258, buy: 85.79, cost: 80 }]]);
+});
 
 await t("две цены Ozon: отдельные поля, рубли и пропуски", () => {
   const product = { price: { amount: "279", currency: "RUB" } };

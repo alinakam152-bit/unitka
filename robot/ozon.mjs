@@ -1,6 +1,8 @@
 import { OrderFinance } from "./order-fin.mjs";
 // Сбор данных одного магазина Ozon. Только чтение.
-import { F, finAgg, Agg, OrdAgg, mskParts, num, daysAgo, eachDay } from "./lib.mjs";
+import { F, finAgg, Agg, OrdAgg, mskParts, num, daysAgo, eachDay, sleep } from "./lib.mjs";
+import reports from "../rnp-data.js";
+const { parseCsv, parseOzonReport, bestPriceRows, reportDay } = reports;
 
 const HOST = "https://api-seller.ozon.ru";
 
@@ -45,12 +47,14 @@ export function postingPricePair(product, financial) {
   };
 }
 
-export async function collectOzon(store, clientId, apiKey, { http, log, now = new Date(), finDays = 90, orderDays = 60 }) {
+export async function collectOzon(store, clientId, apiKey, { http, log, fetchFile = globalThis.fetch, pause = 61000, now = new Date(), finDays = 90, orderDays = 60 }) {
   const headers = { "Client-Id": clientId, "Api-Key": apiKey };
   const post = (path, body) => http(HOST + path, { method: "POST", headers, body });
   const pid = (sku) => `${store.id}:${sku}`;
   const warnings = [];
   const out = { products: [], stocks: null, orders: [], ordersFbs: [], ordH: [], fin: [], ads: [], finTo: null, warnings, tokenExpires: null };
+  out.orderFrom = daysAgo(orderDays, now);
+  out.finFrom = daysAgo(finDays, now);
 
   // 1. Товары
   log("  товары");
@@ -71,7 +75,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
       const sku = it.sku || it.sources?.find((s) => s.sku)?.sku || it.fbo_sku || it.fbs_sku;
       if (!sku) continue;
       const p = { pid: pid(sku), store: store.id, mp: "ozon", sku: String(sku), offerId: it.offer_id || "", name: it.name || String(sku), category: "",
-        photo: (Array.isArray(it.primary_image) ? it.primary_image[0] : it.primary_image) || it.images?.[0] || "", price: num(it.marketing_price || it.price) || null };
+        photo: (Array.isArray(it.primary_image) ? it.primary_image[0] : it.primary_image) || it.images?.[0] || "", price: num(it.price || it.marketing_price) || null };
       prod.set(String(sku), p); byProductId.set(it.id, p);
       for (const s of it.sources || []) if (s.sku) prod.set(String(s.sku), p);
     }
@@ -87,7 +91,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
       for (const it of res?.items || []) {
         const p = byProductId.get(it.product_id);
         if (!p) continue;
-        const s = (stocks[p.pid] ||= { fbo: 0, fbs: 0, toClient: 0, fromClient: 0 });
+        const s = (stocks[p.pid] ||= { fbo: 0, fbs: 0, toClient: null, fromClient: null });
         for (const st of it.stocks || []) {
           if (st.type === "fbo") s.fbo += Math.max(0, num(st.present) - num(st.reserved));
           else if (st.type === "fbs" || st.type === "rfbs") s.fbs += Math.max(0, num(st.present) - num(st.reserved));
@@ -167,7 +171,110 @@ export async function collectOzon(store, clientId, apiKey, { http, log, now = ne
   Object.assign(out, orderFin.result());
   out.fin = fin.rows();
   out.products = [...new Map([...prod.values()].map((p) => [p.pid, p])).values()];
+  const offers = new Map(out.products.map((p) => [p.offerId, p.pid]));
+  const resolve = (sku, offer) => prod.get(sku)?.pid || (offer ? offers.get(offer) : null);
+  try {
+    const report = await ozonOrderReport(post, fetchFile, resolve, now, pause);
+    out.orderReport = report.rows;
+    out.orderPrices = bestPriceRows(out.orderPrices, report.rows);
+    log("    Отчёт об отправлениях получен");
+  } catch (e) { warnings.push(`Отчёт об отправлениях Ozon: ${e.message}`); }
+  try {
+    out.funnel = await ozonFunnel(post, resolve, now, pause);
+  } catch (e) { warnings.push(`Воронка Ozon: ${e.message}`); }
+  if (out.stocks) {
+    try {
+      const skus = out.products.map((p) => Number(p.sku)).filter(Number.isSafeInteger);
+      const transit = new Map();
+      for (let i = 0; i < skus.length; i += 100) {
+        if (i && pause) await sleep(1000);
+        const response = await post("/v1/analytics/stocks", { skus: skus.slice(i, i + 100) });
+        for (const row of response?.items ?? response?.result?.items ?? []) {
+          const id = resolve(String(row.sku));
+          if (id && row.outbound_pending_delivery != null) {
+            transit.set(id, (transit.get(id) ?? 0) + num(row.outbound_pending_delivery));
+          }
+        }
+      }
+      for (const [id, quantity] of transit) if (out.stocks[id]) out.stocks[id].toClient = quantity;
+    } catch (e) { warnings.push(`Товары в пути Ozon: ${e.message}`); }
+  }
   return out;
+}
+
+export async function ozonOrderReport(post, fetchFile, resolve, now, pause) {
+  const from = daysAgo(36, now), to = daysAgo(0, now);
+  const created = await post("/v1/report/postings/create", { filter: {
+    processed_at_from: new Date(Date.parse(from + "T00:00:00+03:00")).toISOString(),
+    processed_at_to: now.toISOString(), delivery_schema: ["fbo", "fbs"]
+  } });
+  const code = created?.result?.code ?? created?.code;
+  if (!code) throw new Error("Ozon не вернул идентификатор отчёта");
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (pause) await sleep(5000);
+    const response = await post("/v1/report/info", { code });
+    const report = response?.result ?? response;
+    if (report?.status === "waiting" || report?.status === "processing") continue;
+    if (!report?.file) throw new Error("Ozon не сформировал файл отчёта");
+    return parseOzonReport(parseCsv(await readOzonReportFile(fetchFile, report.file)), resolve, { from, to });
+  }
+  throw new Error("отчёт ещё формируется");
+}
+
+async function readOzonReportFile(fetchFile, address) {
+  for (let hops = 0; hops < 4; hops++) {
+    const url = new URL(address);
+    const trusted = ["ozon.ru", "ozone.ru", "ozonusercontent.com", "ozonstatic.ru"].some((name) =>
+      url.hostname === name || url.hostname.endsWith("." + name));
+    if (url.protocol !== "https:" || !trusted || url.username || url.password || url.port) {
+      throw new Error("неизвестный адрес файла отчёта");
+    }
+    let response;
+    try { response = await fetchFile(url, { redirect: "manual", signal: AbortSignal.timeout(25000) }); }
+    catch { throw new Error("не удалось скачать файл отчёта"); }
+    if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.get("location")) {
+      address = new URL(response.headers.get("location"), url).href;
+      continue;
+    }
+    if (!response.ok) throw new Error(`файл отчёта недоступен (HTTP ${response.status})`);
+    const bytes = await response.arrayBuffer();
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+    catch { return new TextDecoder("windows-1251").decode(bytes); }
+  }
+  throw new Error("слишком много переадресаций файла отчёта");
+}
+
+async function ozonFunnel(post, resolve, now, pause) {
+  const fields = { hits_view: "views", hits_view_search: "searchViews", hits_view_pdp: "opens",
+    session_view: "visitors", hits_tocart: "carts", ordered_units: "funnelOrders",
+    position_category: "position", delivered_units: "funnelDelivered", returns: "funnelReturns", cancellations: "funnelCancelled",
+    session_view_pdp: "uniqueOpens" };
+  const metrics = Object.keys(fields), rows = new Map();
+  for (let page = 0; page < 30; page++) {
+    if (page && pause) await sleep(61000);
+    const response = await post("/v1/analytics/data", {
+      date_from: daysAgo(30, now), date_to: daysAgo(1, now), dimension: ["sku", "day"], metrics,
+      filters: [], sort: [{ key: "ordered_units", order: "DESC" }], limit: 1000, offset: page * 1000
+    });
+    const data = response?.result?.data ?? response?.data ?? [];
+    for (const item of data) {
+      const id = resolve(String(item.dimensions?.[0]?.id ?? ""));
+      const date = reportDay(item.dimensions?.[1]?.id);
+      if (!id || !date) continue;
+      const line = rows.get(date + "|" + id) || [date, id, {}];
+      rows.set(date + "|" + id, line);
+      for (const [index, metric] of metrics.entries()) {
+        const value = item.metrics?.[index];
+        if (!Number.isFinite(value)) continue;
+        const field = fields[metric];
+        if (field === "position") {
+          if (value > 0) line[2].position = Math.min(line[2].position ?? value, value);
+        } else line[2][field] = (line[2][field] ?? 0) + value;
+      }
+    }
+    if (data.length < 1000) break;
+  }
+  return [...rows.values()];
 }
 
 // Суммы у Ozon приходят то числом/строкой, то объектом {amount, currency}.

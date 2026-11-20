@@ -93,7 +93,18 @@ export function mockFetch(now) {
     }
     if (path === "/api/analytics/v1/stocks-report/wb-warehouses")
       return ok({ data: { items: body.offset ? [] : wbItems.map((it) => ({ nmId: it.sku, quantity: it.stock, inWayToClient: Math.round(it.perDay * 3), inWayFromClient: Math.round(it.perDay * 0.3) })) } });
+    if (path === "/api/analytics/v3/sales-funnel/products/history") return ok(wbItems.filter((it) => body.nmIds.includes(it.sku)).map((it) => ({
+      product: { nmId: it.sku }, history: eachDay(body.selectedPeriod.start, body.selectedPeriod.end).map((date) => {
+        const orders = salesFor(it, date, 1);
+        return { date, openCount: orders * 13, cartCount: orders * 3, orderCount: orders,
+          buyoutCount: Math.floor(orders * 0.8), buyoutPercent: orders ? 80 : 0 };
+      })
+    })));
     if (path === "/api/v3/warehouses") return ok([{ id: 7, name: "Свой склад" }]);
+    if (path === "/api/analytics/v3/sales-funnel/products") return ok({ data: { products: wbItems.map((it) => ({
+      product: { nmId: it.sku }, statistic: { selected: { orderCount: salesFor(it, body.selectedPeriod.start, 1),
+        timeToReady: { days: 2, hours: 3, mins: 15 } } }
+    })) } });
     if (path.startsWith("/api/v3/stocks/")) return ok({ stocks: wbItems.map((it) => ({ chrtId: it.sku * 10, amount: it.i % 5 === 0 ? 120 : 0 })) });
 
     // ---------- Ozon ----------
@@ -101,6 +112,28 @@ export function mockFetch(now) {
     if (path === "/v3/product/list") return ok({ result: { items: body.last_id ? [] : items.map((it) => ({ product_id: it.sku + 5 })), last_id: "" } });
     if (path === "/v3/product/info/list") return ok({ items: items.map((it) => ({ id: it.sku + 5, sku: it.sku, offer_id: it.offer, name: it.name, marketing_price: String(it.price), primary_image: [] })) });
     if (path === "/v4/product/info/stocks") return ok({ items: items.map((it) => ({ product_id: it.sku + 5, stocks: [{ type: "fbo", present: it.stock, reserved: 2 }, { type: "fbs", present: it.i % 4 === 0 ? 50 : 0, reserved: 0 }] })), cursor: "" });
+    if (path === "/v1/analytics/stocks") return ok({ items: items.filter((it) => body.skus.includes(it.sku))
+      .map((it) => ({ sku: it.sku, outbound_pending_delivery: Math.round(it.perDay * 2) })) });
+    if (path === "/v1/analytics/data") return ok({ result: { data: items.flatMap((it) =>
+      eachDay(body.date_from, body.date_to).map((date) => {
+        const orders = salesFor(it, date, 3);
+        const fields = [orders * 24, orders * 16, orders * 8, orders * 18, orders * 3, orders, orders ? 12 + it.i : 0,
+          Math.floor(orders * 0.8), 0, Math.ceil(orders * 0.2), orders * 6];
+        return { dimensions: [{ id: it.sku }, { id: date }], metrics: fields };
+      })) } });
+    if (path === "/v1/report/postings/create") return ok({ result: { code: String(opts.headers["Client-Id"]) } });
+    if (path === "/v1/report/info") return ok({ result: { status: "success", file: `https://cdn.ozon.ru/demo-${body.code}.csv` } });
+    if (u.hostname === "cdn.ozon.ru" && /^\/demo-\d+\.csv$/.test(path)) {
+      const reportItems = ozItems[path.match(/\d+/)[0]];
+      const rows = [["Номер отправления", "Принят в обработку", "Статус", "SKU", "Предельная цена", "Оплачено покупателем", "Количество", "Дата доставки"]];
+      for (const date of eachDay(daysAgo(12, now), daysAgo(2, now))) for (const it of reportItems) {
+        for (const salt of [3, 5]) for (let i = 0; i < salesFor(it, date, salt); i++) {
+          rows.push([`demo-${date}-${it.sku}-${salt}-${i}`, date + " 08:30:00", i === 2 ? "Отменён" : "Доставлен", it.sku,
+            it.price, Math.round(it.price * 0.88), 1, new Date(Date.parse(date) + 172800000).toISOString().slice(0, 10) + " 09:30:00"]);
+        }
+      }
+      return new Response(rows.map((row) => row.join(";")).join("\n"), { status: 200 });
+    }
     if (path === "/v3/posting/fbo/list" || path === "/v4/posting/fbs/list") {
       if (body.cursor) return ok({ result: { postings: [], cursor: "", has_next: false } });
       const salt = path.includes("fbs") ? 5 : 3;

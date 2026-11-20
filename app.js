@@ -3,6 +3,7 @@
    Расшифровка — только здесь, в браузере, по фразе. Себестоимость и налог хранятся в этом браузере. */
 (function () {
   "use strict";
+  const { parseCsv, parseOzonReport, bestPriceRows, indexRnpRows, reportDay, RNP_METRICS, parseRnpMetrics, parseRnpInputs } = window.UnitkaReports;
 
   // ================= Настройки в браузере =================
   const KEY = "unitka.v1", PHRASE_KEY = "unitka.phrase";
@@ -13,8 +14,31 @@
     vat: 0,                                     // НДС, %: 0 — без НДС; 5, 7, 10, 22 — ставка (НДС внутри цены)
     thresholds: { margin: 15, drr: 20 },        // принято: 15% и 20%
     internal: 0,                                // свои расходы, ₽ на 1 шт (упаковка, фулфилмент…)
+    pulstat: { inputs: {}, products: {} },
     view: { home: 28, fin: 28, ord: 1, ordScheme: "all", ordUnit: "rub", profitSort: "profit", profitDir: -1, abc: "profit", report: "week", stores: "all" }
   };
+  const PULSTAT_INPUTS = [
+    ["vat", "НДС, %", 0], ["tax", "УСН, %", 6], ["acquiring", "Эквайринг, %", 1.5],
+    ["loss", "Брак и потери, %", 1], ["delivery", "Доставка до ПВЗ, ₽", 25], ["returns", "Обработка возврата, ₽", 15]
+  ];
+  const PULSTAT_PRODUCT = [
+    ["commission", "Комиссия, %"], ["logistics", "Тариф логистики, ₽"],
+    ["nonlocal", "Наценка за нелокальную продажу, %"], ["buy", "Выкуп, %"]
+  ];
+  function pulstatValues(raw, fields) {
+    return Object.fromEntries(fields.flatMap(([field, label]) => {
+      const number = raw?.[field];
+      const min = field === "buy" ? Number.MIN_VALUE : 0;
+      const max = label.endsWith("%") ? 100 : Infinity;
+      return Number.isFinite(number) && number >= min && number <= max ? [[field, number]] : [];
+    }));
+  }
+  function cleanPulstat(raw) {
+    return {
+      inputs: Object.fromEntries(Object.entries(raw?.inputs || {}).map(([id, values]) => [id, pulstatValues(values, PULSTAT_INPUTS)])),
+      products: Object.fromEntries(Object.entries(raw?.products || {}).map(([id, values]) => [id, pulstatValues(values, PULSTAT_PRODUCT)]))
+    };
+  }
   const ls = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
@@ -31,6 +55,7 @@
         s.ozonTaxForecast = raw.ozonTaxForecast === true;
         s.vat = cleanVat(raw.vat);
         s.internal = cleanMoney(raw.internal);
+        s.pulstat = cleanPulstat(raw.pulstat);
         if (raw.view) Object.assign(s.view, raw.view);
       }
     } catch (e) {}
@@ -1089,6 +1114,20 @@
   // ================= РНП =================
   const rnpRatio = (value, base) => Number.isFinite(value) && base > 0 ? value / base : null;
 
+  const rnpImports = () => {
+    try { return JSON.parse(ls.get(D.demo ? "unitka.rnp.demo" : "unitka.rnp")) || {}; }
+    catch { return {}; }
+  };
+
+  function combineRnpRows(original, updates) {
+    const result = indexRnpRows(original);
+    for (const row of updates) {
+      const id = JSON.stringify(row.slice(0, 2));
+      result.set(id, [row[0], row[1], { ...result.get(id)?.[2], ...row[2] }]);
+    }
+    return [...result.values()];
+  }
+
   function addRnpValues(target, values) {
     for (const [metric, value] of Object.entries(values)) {
       if (Number.isFinite(value)) target[metric] = (target[metric] ?? 0) + value;
@@ -1108,9 +1147,16 @@
         addRnpValues(history.get(pid), { sold });
       }
     }
-    const fin = aggFin(addDays(IX.finToMax, -27), IX.finToMax, { allocate: false });
+    const fin = new Map();
+    for (const row of D.fin) {
+      if (!history.has(row[1])) continue;
+      const last = IX.stores.get(storeOf(row[1]))?.finTo;
+      if (!last || row[0] > last || row[0] < addDays(last, -27)) continue;
+      if (!fin.has(row[1])) fin.set(row[1], {});
+      addRnpValues(fin.get(row[1]), Object.fromEntries(Object.entries(F).slice(2).map(([field, i]) => [field, row[i] ?? 0])));
+    }
     for (const [pid, values] of history) {
-      const row = fin.byP.get(pid);
+      const row = fin.get(pid);
       const units = row ? row.sold - row.ret : 0;
       values.buy = rnpRatio(values.sold, values.orders);
       if (values.buy < 0 || values.buy > 1) values.buy = null;
@@ -1123,6 +1169,12 @@
   function rnpForecast(pid, row, history) {
     if (!(row.orders > 0)) return { forecastProfit: row.spend == null ? null : -row.spend };
     const cost = state.costs[IX.prod.get(pid)?.offerId];
+    const store = storeOf(pid);
+    if (IX.stores.get(store)?.mp === "ozon") {
+      const inputs = state.pulstat.inputs[store] || {};
+      const saved = state.pulstat.products[pid];
+      return pulstatForecast(row, cost, inputs, { buy: row.windowBuy != null ? row.windowBuy * 100 : null, ...saved });
+    }
     if (row.unpriced || !(row.orderSum > 0) || row.spend == null || !Number.isFinite(state.tax.rate) ||
         !Number.isFinite(cost) || history?.buy == null ||
         (history.buy > 0 && (history.commission == null || history.costPerSale == null))) {
@@ -1133,21 +1185,53 @@
     const cogs = units * cost;
     const pre = revenue - revenue * (history.commission ?? 0) -
       units * ((history.costPerSale ?? 0) + state.internal) - cogs - row.spend;
-    const ozon = IX.stores.get(storeOf(pid))?.mp === "ozon";
-    const taxRevenue = ozon && row.pairedQty === row.orders ? row.buyerAmount * history.buy :
-      revenue * (ozon && state.ozonTaxForecast && state.tax.base === "revenue" ? 0.8 : 1);
-    const vat = Math.max(0, taxRevenue) * vatShare();
-    const taxBase = state.tax.base === "profit" ? pre - vat : taxRevenue - vat;
-    return { forecastProfit: pre - vat - Math.max(0, taxBase) * taxRate(), forecastRevenue: revenue, forecastCogs: cogs };
+    const vat = revenue * vatShare();
+    const taxBase = state.tax.base === "profit" ? pre - vat : revenue - vat;
+    return { forecastProfit: pre - vat - Math.max(0, taxBase) * taxRate(), forecastRevenue: revenue, forecastCogs: cogs, forecastOrders: row.orders };
   }
 
-  function rnpColumns(selected, product) {
-    const dates = Array.from({ length: 14 }, (_, i) => addDays(IX.today, i - 13));
+  // PULSTAT: ноябрьская РНП, строки 192–194. Ставки формы заданы в процентах.
+  function pulstatForecast(row, cost, inputs, product) {
+    const missing = {
+      pulstatMissingPrice: row.unpriced || !(row.orderSum > 0),
+      pulstatMissingAds: !Number.isFinite(row.spend),
+      pulstatMissingCost: !Number.isFinite(cost),
+      pulstatMissingInputs: !PULSTAT_INPUTS.every(([field]) => Number.isFinite(inputs[field])),
+      pulstatMissingProduct: !PULSTAT_PRODUCT.every(([field]) => Number.isFinite(product?.[field]))
+    };
+    if (Object.values(missing).some(Boolean)) {
+      return { forecastMissing: 1, ...Object.fromEntries(Object.entries(missing).filter(([, absent]) => absent).map(([field]) => [field, row.orders])) };
+    }
+    const buy = product.buy / 100;
+    const sellerPrice = row.orderSum / row.orders;
+    const buyerPrice = sellerPrice * (row.pulstatBuyerFactor ?? 1);
+    const vat = inputs.vat / 100;
+    const tax = (1 - vat) * inputs.tax / 100 + vat;
+    const adjustedCost = cost * (1 + inputs.loss / 100);
+    const orderDrr = row.spend / row.orderSum;
+    const failedDelivery = (2 * product.logistics + inputs.delivery + inputs.returns) * (1 - buy) / buy;
+    const margin = (sellerPrice * (1 - product.commission / 100 - inputs.acquiring / 100 - orderDrr / buy) -
+      buyerPrice * tax - adjustedCost - product.logistics - sellerPrice * product.nonlocal / 100 -
+      inputs.delivery - failedDelivery) / sellerPrice;
+    const revenue = row.orderSum * buy;
+    const profit = margin * revenue;
+    return { forecastProfit: profit || -row.spend, forecastRevenue: revenue, pulstatMargin: margin,
+      forecastCogs: row.orders * buy * adjustedCost, forecastOrders: row.orders };
+  }
+
+  function rnpColumns(selected, product, storeIds, dates, imports) {
     const byDate = new Map(dates.map((date) => [date, new Map()]));
-    const storeIds = product ? [storeOf(product.pid)] : D.stores.filter((store) => storeOk("*" + store.id)).map((store) => store.id);
     const visibleStores = new Set(storeIds);
     const history = rnpHistory(selected);
     const totals = {};
+    const reportIndex = indexRnpRows(D.orderReport || []);
+    for (const row of imports.orders || []) {
+      const id = JSON.stringify(row.slice(0, 2));
+      const existing = reportIndex.get(id);
+      if (!existing || (row[2]?.orders ?? 0) >= (existing[2]?.orders ?? 0)) reportIndex.set(id, row);
+    }
+    const reports = [...reportIndex.values()];
+    const priceRows = bestPriceRows(D.orderPrices || [], reports);
     function collect(rows, values) {
       for (const row of rows) {
         const items = byDate.get(row[0]);
@@ -1157,10 +1241,28 @@
       }
     }
     collect(D.orders, (r) => ({
-      orders: r[2] - r[4], orderSum: r[3] - r[5],
+      orders: r[2] - r[4], orderSum: r[3] - r[5], cancelledOrders: r[4],
       unpriced: r[6] ?? (r[3] === 0 && IX.prod.get(r[1])?.mp === "ozon" ? r[2] - r[4] : 0)
     }));
-    collect(D.orderPrices || [], (r) => ({ pairedQty: r[2], sellerAmount: r[3], buyerAmount: r[4] }));
+    collect(priceRows, (r) => ({ pairedQty: r[2], sellerAmount: r[3], buyerAmount: r[4] }));
+    collect(reports, ([, , row]) => ({ ...row, reportOrders: row.orders, reportCancelled: row.cancelled,
+      reportDelivered: row.delivered, orders: null, cancelled: null, delivered: null, pairedQty: null, sellerAmount: null, buyerAmount: null }));
+    const metrics = combineRnpRows(D.funnel || [], imports.metrics || []);
+    collect(metrics, ([, , row]) => {
+      const { stock, transit, fromClient, price, delivery, ...fields } = row;
+      return { ...fields, manualDelivery: delivery };
+    });
+    const pulstatPrices = new Map();
+    for (const [date, pid, , seller, buyer] of priceRows) {
+      if (IX.stores.get(storeOf(pid))?.mp !== "ozon" || !visibleStores.has(storeOf(pid))) continue;
+      for (let i = 0; i < 7; i++) {
+        const day = addDays(date, i);
+        if (!byDate.has(day)) continue;
+        const group = day + "|" + pid;
+        if (!pulstatPrices.has(group)) pulstatPrices.set(group, {});
+        addRnpValues(pulstatPrices.get(group), { seller, buyer });
+      }
+    }
     for (const linked of [D.orderFinFbo, D.orderFinFbs]) {
       collect(linked || [], (r) => r[2] > 0 ? { linkedOrders: r[2], linkedSales: r[8] } : {});
     }
@@ -1181,26 +1283,103 @@
       const day = {};
       const stores = new Map(storeIds.map((id) => {
         const store = IX.stores.get(id);
-        const ordersCovered = store.updatedAt && date <= dayStr(new Date(store.updatedAt));
-        const finCovered = date <= store.finTo;
-        const wbAdsCovered = store.mp === "wb" && ordersCovered &&
-          store.ok && Array.isArray(D.ads) && !store.warnings?.some((warning) => warning.startsWith("Реклама WB:"));
+        const updated = store.updatedAt ? dayStr(new Date(store.updatedAt)) : null;
+        const warnings = store.warnings || [];
+        const ordersCovered = updated && date <= updated && date >= (store.orderFrom || addDays(updated, -60)) &&
+          !warnings.some((warning) => /^Заказы FB[OS] Ozon:/.test(warning));
+        const finCovered = store.finTo && date <= store.finTo && date >= (store.finFrom || addDays(store.finTo, -89));
+        const wbAdsCovered = store.mp === "wb" && updated && date <= updated && date >= addDays(updated, -90) &&
+          Array.isArray(D.ads) && !warnings.some((warning) => warning.startsWith("Реклама WB:"));
         return [id, { values: {}, finCovered, ordersCovered, adsCovered: store.mp === "ozon" ? finCovered : wbAdsCovered }];
       }));
       for (const [pid, row] of byDate.get(date)) {
         const store = stores.get(storeOf(pid));
+        if (row.orders == null && row.listedOrders != null) {
+          row.orders = row.listedOrders;
+          row.unpriced = row.listedOrderSum == null ? row.listedOrders : 0;
+          row.orderSum = row.listedOrderSum;
+        } else if (row.unpriced && row.listedOrders === row.orders && row.listedOrderSum > 0) {
+          row.orderSum = row.listedOrderSum;
+          row.unpriced = 0;
+        }
+        if (row.orders == null && row.reportOrders != null) {
+          row.orders = row.reportOrders;
+          row.unpriced = Math.max(0, row.reportOrders - (row.knownOrderPrices ?? 0));
+          row.orderSum = row.reportSellerAmount;
+        } else if (row.unpriced && row.knownOrderPrices === row.orders && row.reportSellerAmount > 0) {
+          row.orderSum = row.reportSellerAmount;
+          row.unpriced = 0;
+        }
+        row.cancelledOrders ??= row.listedCancelled ?? row.reportCancelled;
+        row.sales ??= row.listedSales;
+        row.units ??= row.listedSalesUnits;
+        row.saleReturns = row.ret ?? row.listedReturns;
+        if (row.manualDelivery != null) {
+          const weight = row.reportDelivered ?? row.funnelDelivered ?? row.funnelOrders ?? 1;
+          row.deliveryDays = row.manualDelivery * Math.max(1, weight);
+          row.deliveryUnits = Math.max(1, weight);
+        }
+        if (row.position > 0) {
+          row.positionWeight = row.searchViews > 0 ? row.searchViews : 1;
+          row.positionTotal = row.position * row.positionWeight;
+        }
+        if (row.buyoutPercent != null && row.funnelOrders > 0) {
+          row.buyObservedTotal = row.buyoutPercent * row.funnelOrders / 100;
+          row.buyObservedOrders = row.funnelOrders;
+        } else if (row.funnelDelivered != null && row.funnelCancelled != null) {
+          const units = row.funnelDelivered + row.funnelCancelled;
+          row.buyObservedTotal = Math.max(0, row.funnelDelivered - (row.funnelReturns ?? 0));
+          row.buyObservedOrders = units;
+        }
+        if (row.buyWindowDelivered != null && row.buyWindowCancelled != null) {
+          const volume = row.buyWindowDelivered + row.buyWindowCancelled;
+          const buy = rnpRatio(row.buyWindowDelivered - (row.buyWindowReturned ?? 0), volume);
+          if (buy != null && buy > 0 && buy <= 1) {
+            row.windowBuy = buy;
+            row.windowBuyTotal = buy * volume;
+            row.windowBuyBase = volume;
+          }
+        }
+        const cardVisits = row.uniqueOpens != null ? "uniqueOpens" : "opens";
+        for (const [name, numerator, denominator] of [
+          ["frequency", "views", "visitors"], ["organicCtr", cardVisits, "visitors"], ["cartCr", "carts", cardVisits],
+          ["orderCr", "funnelOrders", "carts"], ["viewOrderCr", "funnelOrders", "visitors"],
+          ["placementCtr", "placementClicks", "placementViews"], ["placementCpc", "placementSpend", "placementClicks"],
+          ["searchCtr", "searchAdClicks", "searchAdViews"], ["searchCpc", "searchAdSpend", "searchAdClicks"]
+        ]) {
+          if (row[numerator] != null && row[denominator] != null) {
+            row[name + "Value"] = row[numerator];
+            row[name + "Base"] = row[denominator];
+          }
+        }
+        const outsideSearch = row.searchViews == null ? null : row.views - row.searchViews;
+        const outsideCategory = row.nonCategoryViews ?? outsideSearch;
+        if (row.views != null && outsideCategory != null && outsideCategory >= 0 && outsideCategory <= row.views) {
+          row.nonSearchViews = outsideCategory;
+          row.nonSearchBase = row.views;
+        }
+        if (row.placementSpend != null || row.searchAdSpend != null || row.orderAdSpend != null) {
+          row.spend ??= (row.placementSpend ?? 0) + (row.searchAdSpend ?? 0) + (row.orderAdSpend ?? 0);
+        }
         if (store.adsCovered) row.spend ??= 0;
+        const pair = pulstatPrices.get(date + "|" + pid);
+        if (!(row.rollingBuyer > 0 && row.rollingBuyer <= row.rollingSeller)) {
+          row.rollingSeller = pair?.seller;
+          row.rollingBuyer = pair?.buyer;
+        }
+        row.pulstatBuyerFactor = rnpRatio(row.rollingBuyer, row.rollingSeller);
         addRnpValues(store.values, row);
         addRnpValues(day, rnpForecast(pid, row, history.get(pid)));
         if (row.orders > 0) {
-          const buy = history.get(pid)?.buy;
+          const buy = IX.stores.get(storeOf(pid))?.mp === "ozon"
+            ? rnpRatio(state.pulstat.products[pid]?.buy, 100) ?? row.windowBuy : history.get(pid)?.buy;
           addRnpValues(day, buy == null ? { unknownBuy: row.orders } : { expectedUnits: row.orders * buy });
         }
         if (store.finCovered && (row.rev || row.units || row.spend || COST_KEYS.some((field) => row[field]) || row.comp)) {
           const fact = Object.fromEntries(Object.keys(F).slice(2).map((field) => [field, row[field] ?? 0]));
           fact.ads = row.spend ?? 0;
           const result = calc(pid, fact);
-          const missing = !store.adsCovered || !Number.isFinite(state.tax.rate) ||
+          const missing = !Number.isFinite(row.spend) || !Number.isFinite(state.tax.rate) ||
             (result.cost == null && result.units !== 0);
           addRnpValues(day, missing ? { factMissing: 1 } : { factProfit: result.profit, factRevenue: result.rev });
         }
@@ -1209,10 +1388,12 @@
         if (ordersCovered) {
           store.orders ??= 0;
           store.orderSum ??= 0;
+          store.cancelledOrders ??= 0;
         }
         if (finCovered) {
           store.sales ??= 0;
           store.units ??= 0;
+          store.saleReturns ??= 0;
         }
         if (adsCovered) {
           store.spend ??= 0;
@@ -1227,82 +1408,312 @@
         }
         if (!finCovered) addRnpValues(day, { factUnclosed: 1 });
         else if (!adsCovered) addRnpValues(day, { factMissing: 1 });
-        if (!adsCovered) addRnpValues(day, { adsUnclosed: 1 });
+        if (!adsCovered && store.spend == null) addRnpValues(day, { adsUnclosed: 1 });
         if (!adsCovered || !ordersCovered) addRnpValues(day, { forecastMissing: 1 });
       }
-      const { factProfit, factRevenue, factMissing, factUnclosed, forecastProfit, forecastRevenue, forecastCogs, forecastMissing, adsUnclosed, ...metrics } = day;
+      const { factProfit, factRevenue, factMissing, factUnclosed, forecastProfit, forecastRevenue, forecastCogs, forecastMissing,
+        adsUnclosed, rollingSeller, rollingBuyer, windowBuyTotal, windowBuyBase, ...metrics } = day;
       addRnpValues(totals, metrics);
+      if (rollingSeller > 0) Object.assign(totals, { rollingSeller, rollingBuyer });
+      if (windowBuyBase > 0) Object.assign(totals, { windowBuyTotal, windowBuyBase });
       if (!factUnclosed && day.sales != null) addRnpValues(totals, { stockDays: 1, stockSales: day.units });
-      if (!factMissing && !factUnclosed && day.sales != null) {
+      if (factProfit != null || (!factMissing && !factUnclosed && day.sales != null)) {
         day.factProfit = factProfit ?? 0;
         day.factRevenue = factRevenue ?? 0;
         addRnpValues(totals, { factProfit: day.factProfit, factRevenue: day.factRevenue, factDays: 1 });
+        if (factMissing || factUnclosed) addRnpValues(totals, { partialFactDays: 1 });
       }
-      if (!forecastMissing && day.orders != null) {
+      if (day.forecastOrders > 0 || forecastProfit || (!forecastMissing && day.orders != null)) {
         day.forecastProfit = forecastProfit ?? 0;
-        addRnpValues(totals, { forecastProfit: day.forecastProfit, forecastRevenue, forecastCogs, forecastDays: 1 });
+        addRnpValues(totals, { forecastProfit: day.forecastProfit, forecastRevenue, forecastCogs });
+      } else {
+        day.forecastProfit = null;
       }
       return day;
     });
-    const snapshots = dates.map(() => ({}));
+    const stocks = indexRnpRows(D.stockHistory || []);
     for (const p of selected) {
       const stock = stockOf(p.pid);
       if (stock == null) continue;
       const store = IX.stores.get(storeOf(p.pid));
       const updated = store?.updatedAt ? dayStr(new Date(store.updatedAt)) : null;
-      const transit = store?.mp === "wb" && !store.warnings?.some((warning) => warning.startsWith("Остатки WB:"))
-        ? D.stocks[p.pid].toClient : null;
-      const cost = state.costs[p.offerId];
-      const snapshot = {
-        stock, inStock: Number(stock > 0), listed: 1, transit,
-        stockCost: stock === 0 || Number.isFinite(cost) ? stock * (cost ?? 0) : null,
-        stockMissingCost: stock > 0 && !Number.isFinite(cost) ? 1 : 0,
-        stockValue: stock === 0 || p.price > 0 ? stock * (p.price ?? 0) : null,
-        stockMissingPrice: stock > 0 && !(p.price > 0) ? 1 : 0
-      };
-      addRnpValues(totals, snapshot);
-      const index = dates.indexOf(updated);
-      if (index >= 0) addRnpValues(snapshots[index], snapshot);
+      if (!byDate.has(updated)) continue;
+      const id = JSON.stringify([updated, p.pid]);
+      if (stocks.has(id)) continue;
+      const partial = store.stockPartial || store.warnings?.some((warning) => /^Остатки.*WB:/.test(warning));
+      const source = D.stocks[p.pid];
+      stocks.set(id, [updated, p.pid, { stock, price: p.price, stockPartial: partial,
+        transit: store.mp === "wb" && !partial ? source.toClient : null,
+        fromClient: store.mp === "wb" && !partial ? source.fromClient : null }]);
     }
-    snapshots.forEach((snapshot, i) => addRnpValues(columns[i], snapshot));
+    const manualStocks = (imports.metrics || []).filter(([, , values]) =>
+      values.stock != null || values.transit != null || values.fromClient != null || values.price != null);
+    const productIndex = new Map(selected.map((p) => [p.pid, p]));
+    const dateIndex = new Map(dates.map((date, index) => [date, index]));
+    const lastSnapshot = new Map();
+    for (const [date, pid, values] of combineRnpRows([...stocks.values()], manualStocks)) {
+      const index = dateIndex.get(date), p = productIndex.get(pid);
+      if (index == null || !p) continue;
+      const { stock, transit, fromClient, price, stockPartial } = values;
+      const cost = state.costs[p.offerId];
+      const quantity = Number.isFinite(stock) ? stock + (transit ?? 0) : null;
+      const snapshot = {
+        stock, inStock: stock == null ? null : Number(stock > 0), listed: stock == null ? null : 1,
+        stockPartial: stockPartial ? 1 : 0, transit, fromClient,
+        stockCost: quantity === 0 || Number.isFinite(cost) && quantity != null ? quantity * (cost ?? 0) : null,
+        stockMissingCost: quantity > 0 && !Number.isFinite(cost) ? 1 : 0,
+        stockValue: quantity === 0 || price > 0 && quantity != null ? quantity * price : null,
+        stockMissingPrice: quantity > 0 && !(price > 0) ? 1 : 0
+      };
+      addRnpValues(columns[index], snapshot);
+      if (lastSnapshot.get(pid)?.date <= date || !lastSnapshot.has(pid)) lastSnapshot.set(pid, { date, snapshot });
+    }
+    for (const { snapshot } of lastSnapshot.values()) addRnpValues(totals, snapshot);
     return { dates, columns, totals };
   }
 
+  function pulstatFields(fields, values) {
+    return fields.map(([field, label]) => `<label class="field">${label}
+      <input type="number" name="${field}" inputmode="decimal" min="${field === "buy" ? "0.000001" : "0"}"
+        ${label.endsWith("%") ? 'max="100"' : ""} step="any" value="${values[field] ?? ""}" placeholder="—">
+    </label>`).join("");
+  }
+
+  function pulstatSettings(products, current) {
+    if (!products.length) return "";
+    return `<details class="rnp-method pulstat-settings">
+      <summary>Вводные PULSTAT · Ozon</summary>
+      <p>Задай параметры магазина и товара. Себестоимость берётся из <a href="#/settings">настроек «Юнитки»</a>. Кнопка подставляет ставки и расходы из образца, чтобы их можно было сверить перед сохранением.</p>
+      <form id="pulstat-form">
+        <fieldset><legend>Магазин и товар</legend>
+          <label class="field">Артикул <select name="pid">${products.map((p) =>
+            `<option value="${esc(p.pid)}"${p === current ? " selected" : ""}>${esc(p.offerId || p.sku)} · ${esc(p.name || "")} · ${esc(storeName(p.store))}</option>`).join("")}</select></label>
+        </fieldset>
+        <fieldset><legend>Вводные магазина Ozon</legend><div class="pulstat-fields" id="pulstat-store-fields"></div>
+          <button class="btn" type="button" id="pulstat-example">Подставить значения образца</button>
+        </fieldset>
+        <fieldset><legend>Параметры артикула из Unit</legend>
+          <div class="pulstat-fields" id="pulstat-product-fields"></div>
+        </fieldset>
+        <button class="btn primary" type="submit">Сохранить вводные</button>
+      </form>
+    </details>`;
+  }
+
+  function bindPulstatSettings() {
+    const form = app.querySelector("#pulstat-form");
+    if (!form) return;
+    const select = form.elements.namedItem("pid");
+    const storeFields = form.querySelector("#pulstat-store-fields");
+    const productFields = form.querySelector("#pulstat-product-fields");
+    let currentStore;
+    const showProduct = () => {
+      const store = storeOf(select.value);
+      if (store !== currentStore) {
+        storeFields.innerHTML = pulstatFields(PULSTAT_INPUTS, state.pulstat.inputs[store] || {});
+        currentStore = store;
+      }
+      productFields.innerHTML = pulstatFields(PULSTAT_PRODUCT, state.pulstat.products[select.value] || {});
+    };
+    showProduct();
+    select.addEventListener("change", showProduct);
+    form.querySelector("#pulstat-example").addEventListener("click", () => {
+      for (const [field, , example] of PULSTAT_INPUTS) form.elements.namedItem(field).value = example;
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const pid = select.value;
+      const read = (fields) => pulstatValues(Object.fromEntries(fields.map(([field]) =>
+        [field, form.elements.namedItem(field).valueAsNumber])), fields);
+      state.pulstat.inputs[storeOf(pid)] = read(PULSTAT_INPUTS);
+      state.pulstat.products[pid] = read(PULSTAT_PRODUCT);
+      save();
+      render();
+      const updated = app.querySelector("#pulstat-form");
+      updated.closest("details").open = true;
+      updated.elements.namedItem("pid").value = pid;
+      updated.elements.namedItem("pid").dispatchEvent(new Event("change"));
+      toast("Вводные PULSTAT сохранены");
+    });
+  }
+
+  function rnpReportControls(stores) {
+    return `<details class="rnp-method pulstat-settings">
+      <summary>Загрузить данные РНП из отчёта</summary>
+      <p>Можно загрузить отчёт Ozon об отправлениях, лист «Техлист» с дневными показателями или параметры товаров из Unit. Для связки по названию сначала загрузи «Техлист». Отдельные отчёты FBO и FBS выбирай одновременно. Импорт применяется в этом браузере к выбранному магазину.</p>
+      <form id="rnp-import" class="rnp-import">
+        <label class="field">Магазин<select name="store">${stores.map((s) => `<option value="${esc(s.id)}">${esc(s.name)} · ${mpName(s.mp)}</option>`).join("")}</select></label>
+        <label class="field">Что загружаем<select name="kind"><option value="orders">Отправления Ozon</option><option value="metrics">Техлист или показатели по дням</option><option value="inputs">Параметры артикулов из Unit</option></select></label>
+        <label class="field">Файлы CSV или XLSX<input name="files" type="file" accept=".csv,.tsv,.xlsx" multiple required></label>
+        <div class="btn-row">
+          <button class="btn primary" type="submit">Загрузить</button>
+          <button class="btn" type="button" id="rnp-template">Скачать шаблон</button>
+        </div>
+        <p class="small" id="rnp-import-status" role="status"></p>
+      </form>
+    </details>`;
+  }
+
+  function bindRnpReports() {
+    const form = app.querySelector("#rnp-import");
+    if (!form) return;
+    const field = (name) => form.elements.namedItem(name);
+    const status = form.querySelector("#rnp-import-status");
+    form.querySelector("#rnp-template").addEventListener("click", () => {
+      const kind = field("kind").value;
+      const headers = kind === "inputs" ? ["Артикул продавца", "SKU", "Себестоимость, ₽", ...PULSTAT_PRODUCT.map(([, label]) => label)] :
+        kind === "metrics" ? ["Дата", "Артикул продавца", "SKU", ...Object.values(RNP_METRICS).map(([label]) => label)] :
+          ["Номер отправления", "Принят в обработку", "Статус", "SKU", "Артикул", "Предельная цена", "Оплачено покупателем", "Количество", "Дата доставки"];
+      download("unitka-rnp-" + kind + ".csv", csv([headers]), "text/csv;charset=utf-8");
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const sid = field("store").value, kind = field("kind").value;
+      if (kind !== "metrics" && IX.stores.get(sid)?.mp !== "ozon") {
+        status.textContent = "Этот формат нужен для магазина Ozon.";
+        return;
+      }
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      status.textContent = "Читаю файлы…";
+      const products = D.products.filter((p) => storeOf(p.pid) === sid);
+      const saved = rnpImports();
+      const skus = new Map(products.filter((p) => p.sku).map((p) => [String(p.sku), p.pid]));
+      const offers = new Map(), names = new Map();
+      for (const p of products) {
+        if (p.offerId) offers.set(p.offerId, offers.has(p.offerId) ? null : p.pid);
+        if (p.name) names.set(p.name, names.has(p.name) ? null : p.pid);
+      }
+      const storedAliases = saved.aliases?.[sid] || {};
+      const resolve = (sku, offer, name) => skus.get(sku) || offers.get(offer) ||
+        (Object.hasOwn(storedAliases, name) ? storedAliases[name] : names.get(name));
+      try {
+        const incoming = [], seen = new Set();
+        const aliases = { ...saved.aliases?.[sid] };
+        let unmatched = 0, invalidPrices = 0;
+        for (const file of field("files").files) {
+          const buffer = await file.arrayBuffer();
+          let rows;
+          if (/\.xlsx$/i.test(file.name)) rows = await parseXlsx(buffer);
+          else {
+            let contents;
+            try { contents = new TextDecoder("utf-8", { fatal: true }).decode(buffer); }
+            catch { contents = new TextDecoder("windows-1251").decode(buffer); }
+            rows = parseCsv(contents);
+          }
+          const parsed = kind === "orders" ? parseOzonReport(rows, resolve, { seen }) :
+            kind === "metrics" ? parseRnpMetrics(rows, resolve) : parseRnpInputs(rows, resolve);
+          incoming.push(...parsed.rows);
+          for (const [name, pids] of Object.entries(parsed.aliases || {})) {
+            Object.defineProperty(aliases, name, { value: [...new Set([...(Object.hasOwn(aliases, name) ? aliases[name] : []), ...pids])],
+              enumerable: true, configurable: true, writable: true });
+          }
+          unmatched += parsed.unmatched;
+          invalidPrices += parsed.invalidPrices ?? 0;
+        }
+        if (!incoming.length) throw new Error("Нет данных для артикулов выбранного магазина");
+        if (kind === "inputs") {
+          for (const [pid, { cost, ...values }] of incoming) {
+            state.pulstat.products[pid] = { ...state.pulstat.products[pid], ...pulstatValues(values, PULSTAT_PRODUCT) };
+            const offer = IX.prod.get(pid)?.offerId;
+            if (offer && Number.isFinite(cost) && state.costs[offer] == null) state.costs[offer] = cost;
+          }
+          save();
+        } else {
+          const imports = saved;
+          if (kind === "orders") {
+            const batch = new Map();
+            for (const row of incoming) {
+              const id = JSON.stringify(row.slice(0, 2));
+              if (!batch.has(id)) batch.set(id, [row[0], row[1], {}]);
+              addRnpValues(batch.get(id)[2], row[2]);
+            }
+            const existing = indexRnpRows(imports.orders || []);
+            for (const [id, row] of batch) existing.set(id, row);
+            imports.orders = [...existing.values()];
+          } else {
+            imports.metrics = combineRnpRows(imports.metrics || [], incoming);
+            imports.aliases = { ...imports.aliases, [sid]: aliases };
+          }
+          if (!ls.set(D.demo ? "unitka.rnp.demo" : "unitka.rnp", JSON.stringify(imports))) {
+            throw new Error("Не удалось сохранить отчёт в браузере");
+          }
+        }
+        const message = `Загружено строк: ${int(incoming.length)}${unmatched ? ` · без совпадения: ${int(unmatched)}` : ""}${invalidPrices ? ` · без сопоставимых цен: ${int(invalidPrices)}` : ""}`;
+        render();
+        const result = app.querySelector("#rnp-import-status");
+        if (result) {
+          result.closest("details").open = true;
+          result.textContent = message;
+        }
+      } catch (error) { status.textContent = error.message; }
+      finally { submit.disabled = false; }
+    });
+  }
+
   function renderRnp(parts, q) {
-    const products = D.products.filter((p) => storeOk(p.pid));
+    const scope = q.get("scope") ?? state.view.stores;
+    const stores = D.stores.filter((s) => scope === "all" || scope === s.id || scope === "mp-" + s.mp);
+    const visibleStores = new Set(stores.map((store) => store.id));
+    const products = D.products.filter((p) => visibleStores.has(storeOf(p.pid)));
     const inStock = products.filter((p) => stockOf(p.pid) > 0)
       .sort((a, b) => String(a.offerId || a.sku).localeCompare(String(b.offerId || b.sku), "ru", { numeric: true }));
-    const product = inStock.find((p) => p.pid === q.get("product"));
-    const { dates, columns, totals } = rnpColumns(product ? [product] : products, product);
+    const showAll = q.get("items") === "all";
+    const productList = showAll ? [...inStock, ...products.filter((p) => !(stockOf(p.pid) > 0))] : inStock;
+    const product = productList.find((p) => p.pid === q.get("product"));
+    const period = [14, 30, 60].includes(Number(q.get("period"))) ? Number(q.get("period")) : 14;
+    const requestedEnd = reportDay(q.get("to"));
+    const dateTo = requestedEnd && requestedEnd <= IX.today ? requestedEnd : IX.today;
+    const wideDates = Array.from({ length: period }, (_, i) => addDays(dateTo, i - period + 1));
+    const { dates, columns, totals } = rnpColumns(product ? [product] : products, product,
+      product ? [storeOf(product.pid)] : [...visibleStores], wideDates, rnpImports());
+    const ozonProducts = !product || product.mp === "ozon" ? products.filter((p) => p.mp === "ozon") : [];
     const ratio = rnpRatio;
-    const factProfit = (c) => c.factMissing || c.factUnclosed ? null : c.factProfit;
-    const forecastProfit = (c) => c.forecastMissing ? null : c.forecastProfit;
+    const factProfit = (c) => c.factProfit;
+    const forecastProfit = (c) => c.forecastProfit;
     const factMargin = (c) => ratio(factProfit(c), c.factRevenue);
-    const forecastMargin = (c) => ratio(forecastProfit(c), c.forecastRevenue);
+    const forecastMargin = (c) => product?.mp === "ozon" && c !== totals ? c.pulstatMargin : ratio(forecastProfit(c), c.forecastRevenue);
     const forecastRoi = (c) => ratio(forecastProfit(c), c.forecastCogs);
     const buyRate = (c) => c.unknownBuy ? null : ratio(c.expectedUnits, c.orders);
     const stockDays = (c) => ratio(c.stock, totals.stockDays > 0 ? totals.stockSales / totals.stockDays : null);
     const linkedBuy = (c) => c.linkedSales >= 0 && c.linkedSales <= c.linkedOrders ? ratio(c.linkedSales, c.linkedOrders) : null;
-    const orderDrr = (c) => c.adsUnclosed ? null : ratio(c.orderSpend, c.matchedOrders);
-    const salesDrr = (c) => c.adsUnclosed || c.factUnclosed ? null : ratio(c.salesSpend, c.matchedSales);
+    const orderDrr = (c) => ratio(c.orderSpend, c.matchedOrders);
+    const salesDrr = (c) => ratio(c.salesSpend, c.matchedSales);
     const money2 = (value) => value == null ? "—" : value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    const pct2 = (value) => value == null ? "—" : value.toLocaleString("ru-RU", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\s/g, "");
+    const quotient = (name) => (c) => ratio(c[name + "Value"], c[name + "Base"]);
+    const dailyBuy = (c) => ratio(c.buyObservedTotal, c.buyObservedOrders) ?? linkedBuy(c);
+    const missingPulstat = [
+      ["pulstatMissingPrice", "цены заказа"], ["pulstatMissingAds", "данных о рекламе"],
+      ["pulstatMissingCost", "себестоимости"], ["pulstatMissingInputs", "вводных магазина"], ["pulstatMissingProduct", "параметров артикула"]
+    ].filter(([field]) => totals[field] > 0).map(([field, label]) => `${label} (${int(totals[field])} шт.)`);
     const rows = [
       ["Продажи и остатки", [
         ["Заказы, ₽", (c) => c.unpriced ? null : c.orderSum], ["Продажи, ₽", (c) => c.sales],
         ["Заказы, шт.", (c) => c.orders],
-        ["Продажи, шт.", (c) => c.units], ["Средняя цена заказа, ₽", (c) => c.unpriced ? null : ratio(c.orderSum, c.orders)],
+        ["Продажи, шт.", (c) => c.units], ["Отмены, шт.", (c) => c.cancelledOrders], ["Возвраты, шт.", (c) => c.saleReturns],
+        ["Средняя цена заказа, ₽", (c) => c.unpriced ? null : ratio(c.orderSum, c.orders)],
+        ["Цена продавца по парам, ₽", (c) => ratio(c.sellerAmount, c.pairedQty), money2],
         ["Цена для покупателя, ₽", (c) => ratio(c.buyerAmount, c.pairedQty), money2],
-        ["Соинвест, %", (c) => ratio(c.sellerAmount - c.buyerAmount, c.sellerAmount), pct],
-        ["К покупателям · WB, шт.", (c) => c.transit],
+        ["Соинвест, %", (c) => ratio(c.sellerAmount - c.buyerAmount, c.sellerAmount), pct2],
+        ["Соинвест за 7 дней · Ozon, %", (c) => ratio(c.rollingSeller - c.rollingBuyer, c.rollingSeller), pct2],
+        ["Заказано с обеими ценами, шт.", (c) => c.pairedQty],
+        ["В пути к покупателям, шт.", (c) => c.transit], ["В пути от покупателей, шт.", (c) => c.fromClient],
         ["Доступно к продаже, шт.", (c) => c.stock],
         ["Артикулы в наличии / с данными", (c) => c.listed ? `${int(c.inStock)} / ${int(c.listed)}` : null],
-        ["Среднее время доставки"], ["Запас по темпу продаж, дни", stockDays]
+        ["Среднее время доставки, дни", (c) => ratio(c.deliveryDays, c.deliveryUnits), money2],
+        ["Оборачиваемость по темпу продаж, дни", stockDays, money2]
       ]],
       ["Воронка", [
-        ["Средняя позиция в поиске"], ["Частота показов"], ["Уникальные посетители"],
-        ["Добавления в корзину"], ["CTR общий, %"], ["CR в корзину, %"],
-        ["CR в заказ, %"], ["CR показы → заказы, %"], ["Доля некатегорийного трафика, %"],
-        ["Выкуп по связанным заказам, %", linkedBuy, pct], ["Оценка выкупа по истории, %", buyRate, pct]
+        ["Средняя позиция в поиске", (c) => ratio(c.positionTotal, c.positionWeight), money2],
+        ["Показы, шт.", (c) => c.views], ["Частота показов", quotient("frequency"), money2],
+        ["Уникальные посетители", (c) => c.visitors], ["Открытия карточки", (c) => c.opens],
+        ["Уникальные посетители карточки", (c) => c.uniqueOpens],
+        ["Добавления в корзину", (c) => c.carts], ["CTR общий, %", quotient("organicCtr"), pct],
+        ["CR в корзину, %", quotient("cartCr"), pct], ["CR в заказ, %", quotient("orderCr"), pct],
+        ["CR показы → заказы, %", quotient("viewOrderCr"), pct],
+        ["Доля показов вне поиска и каталога, %", (c) => ratio(c.nonSearchViews, c.nonSearchBase), pct],
+        ["Выкуп за день, %", dailyBuy, pct], ["Выкуп за месяц, %", (c) => ratio(c.windowBuyTotal, c.windowBuyBase) ?? buyRate(c), pct]
       ]],
       ["Реклама", [
         ["Показы · WB", (c) => c.impressions], ["Клики · WB", (c) => c.clicks],
@@ -1310,7 +1721,13 @@
         ["CPC · WB, ₽", (c) => ratio(c.wbSpend, c.clicks), money2],
         ["Расход · WB, ₽", (c) => c.wbSpend],
         ["Расход · Ozon, ₽", (c) => c.ozonSpend],
-        ["Реклама итого, ₽", (c) => c.adsUnclosed ? null : c.spend, int, "emphasis"],
+        ["Полки и рекомендации · показы", (c) => c.placementViews], ["Полки и рекомендации · клики", (c) => c.placementClicks],
+        ["Полки и рекомендации · CTR, %", quotient("placementCtr"), pct], ["Полки и рекомендации · CPC, ₽", quotient("placementCpc"), money2],
+        ["Полки и рекомендации · расход, ₽", (c) => c.placementSpend],
+        ["Поиск · показы", (c) => c.searchAdViews], ["Поиск · клики", (c) => c.searchAdClicks],
+        ["Поиск · CTR, %", quotient("searchCtr"), pct], ["Поиск · CPC, ₽", quotient("searchCpc"), money2],
+        ["Поиск · расход, ₽", (c) => c.searchAdSpend], ["Оплата за заказ · расход, ₽", (c) => c.orderAdSpend],
+        ["Реклама итого, ₽", (c) => c.adsUnclosed && !c.spend ? null : c.spend, int, "emphasis"],
         ["ДРР от заказов, %", orderDrr, pct, "drr"],
         ["ДРР от продаж, %", salesDrr, pct, "drr"]
       ]],
@@ -1319,12 +1736,12 @@
         ["Маржа, %", factMargin, pct, "margin"]
       ]],
       ["Прогноз по заказам", [
-        ["Ожидаемая выручка, ₽", (c) => c.forecastMissing ? null : c.forecastRevenue],
-        ["Ожидаемая прибыль, ₽", forecastProfit, int, "profit"],
-        ["Ожидаемая маржа, %", forecastMargin, pct, "margin"],
-        ["Ожидаемый ROI, %", forecastRoi, pct, "profit"]
+        ["Ожидаемая выручка, ₽", (c) => c.forecastRevenue],
+        ["Ожидаемая прибыль, ₽", forecastProfit, money2, "profit"],
+        ["Ожидаемая маржа, %", forecastMargin, pct2, "margin"],
+        ["Ожидаемый ROI, %", forecastRoi, pct2, "profit"]
       ]],
-      ["Стоимость доступного остатка", [
+      ["Стоимость запасов", [
         ["По себестоимости, ₽", (c) => c.stockMissingCost ? null : c.stockCost],
         ["По цене продавца, ₽", (c) => c.stockMissingPrice ? null : c.stockValue]
       ]]
@@ -1347,24 +1764,36 @@
     app.innerHTML = `
       ${demoNote()}
       <div class="head-row"><h1>РНП</h1></div>
-      ${storeChips()}
-      <label class="rnp-product">Артикул
-        <select id="rnp-product">
-          <option value="">Все артикулы</option>
-          ${inStock.map((p) => `<option value="${esc(p.pid)}"${p === product ? " selected" : ""}>${esc(p.offerId || p.sku || p.pid)} · ${esc(p.name || "")} · ${esc(storeName(storeOf(p.pid)))}</option>`).join("")}
-        </select>
-      </label>
-      ${inStock.length ? "" : '<p class="muted small">Нет артикулов с подтверждённым положительным остатком.</p>'}
+      <div class="rnp-filters">
+        <label class="field">Площадка или магазин<select id="rnp-scope">
+          ${[["all", "Все магазины"], ...[["mp-wb", "Все магазины WB"], ["mp-ozon", "Все магазины Ozon"]].filter(([id]) => D.stores.some((s) => id === "mp-" + s.mp)),
+            ...D.stores.map((s) => [s.id, s.name + " · " + mpName(s.mp)])].map(([id, label]) =>
+            `<option value="${esc(id)}"${id === scope ? " selected" : ""}>${esc(label)}</option>`).join("")}
+        </select></label>
+        <label class="field">Период<select id="rnp-period">${[14, 30, 60].map((n) => `<option value="${n}"${n === period ? " selected" : ""}>${n} дней</option>`).join("")}</select></label>
+        <label class="field">Последний день<input id="rnp-end" type="date" value="${dateTo}" max="${IX.today}"></label>
+        <label class="field rnp-article">Артикул<select id="rnp-product">
+            <option value="">Все артикулы</option>
+            ${productList.map((p) => `<option value="${esc(p.pid)}"${p === product ? " selected" : ""}>${esc(p.offerId || p.sku || p.pid)} · ${esc(p.name || "")} · ${esc(storeName(storeOf(p.pid)))}</option>`).join("")}
+        </select></label>
+        <label class="rnp-check"><input type="checkbox" id="rnp-items"${showAll ? " checked" : ""}> Показать товары без остатка</label>
+      </div>
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
-      <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Даты отчётов по Москве</p>
+      <p class="updated">${dmy(dates[0])} — ${dmy(dateTo)} · Даты отчётов по Москве</p>
       <div class="rnp-summary">
         <div><span>Чистая прибыль · ${totals.factDays ?? 0} из ${dates.length} дн.</span><strong class="${factProfit(totals) == null ? "" : signCls(factProfit(totals))}">${rub(factProfit(totals))}</strong></div>
-        <div><span>Ожидаемая прибыль · ${totals.forecastDays ?? 0} из ${dates.length} дн.</span><strong class="${forecastProfit(totals) == null ? "" : signCls(forecastProfit(totals))}">${rub(forecastProfit(totals))}</strong></div>
+        <div><span>Ожидаемая прибыль · ${int(totals.forecastOrders ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт.</span><strong class="${forecastProfit(totals) == null ? "" : signCls(forecastProfit(totals))}">${rub(forecastProfit(totals))}</strong></div>
+        <div><span>Соинвест · ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт.</span><strong>${pct2(ratio(totals.sellerAmount - totals.buyerAmount, totals.sellerAmount))}</strong></div>
         <div><span>ДРР от продаж</span><strong>${pct(salesDrr(totals))}</strong></div>
       </div>
-      ${!Number.isFinite(state.tax.rate) ? '<p class="banner small">Укажи ставку налога, чтобы увидеть прибыль. <a href="#/settings">Настройки</a></p>' : ""}
+      ${!Number.isFinite(state.tax.rate) ? '<p class="banner small">Для прибыли по начислениям укажи ставку налога в <a href="#/settings">настройках</a>.</p>' : ""}
+      ${totals.partialFactDays ? `<p class="muted small">По прибыли есть неполные данные за ${int(totals.partialFactDays)} дн. В итог вошли только рассчитанные строки.</p>` : ""}
+      ${totals.stockPartial ? '<p class="muted small">Часть снимков остатков загружена с неполным покрытием складов.</p>' : ""}
+      ${rnpReportControls(stores.length ? stores : D.stores)}
+      ${pulstatSettings(ozonProducts, product)}
+      ${missingPulstat.length ? `<p class="muted small">Для прогноза Ozon не хватает ${missingPulstat.join(", ")}. У одного заказа может быть несколько пропусков.</p>` : ""}
       <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
-        <table class="rnp-table" aria-label="РНП за 14 дней">
+        <table class="rnp-table" aria-label="РНП за ${period} дней">
           <thead><tr><th scope="col">Показатель</th><th scope="col" class="rnp-total">За период</th>${dates.map((date) =>
             `<th scope="col"><time datetime="${date}">${dm(date)}.${date.slice(2, 4)}</time><span>${weekday.format(new Date(date))}</span></th>`).join("")}</tr></thead>
           ${rows.map(([label, items]) => `<tbody><tr class="rnp-section"><th scope="rowgroup">${label}</th><td class="rnp-total"></td><td colspan="${dates.length}"></td></tr>${items.map(rowHtml).join("")}</tbody>`).join("")}
@@ -1372,17 +1801,23 @@
       </div>
       <details class="rnp-method">
         <summary>Как считаются показатели</summary>
-        <p>Заказы показаны без отмен, продажи — за вычетом возвратов. ДРР за период делит расходы на заказы или продажи за совпадающие дни по каждому магазину. Цена покупателя и соинвест рассчитаны по ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт. с обеими ценами. Для WB цена покупателя указана без скидки WB Кошелька.</p>
-        <p>Факт берётся из отчётов о начислениях. Для прогноза сумма заказов умножается на оценку выкупа по связанным продажам за 28 дней. Последние 14 дней исключены из оценки, чтобы дать заказам время на доставку и возврат. Комиссия, логистика, эквайринг и прочие расходы оцениваются по последним 28 дням начислений. Реклама вычитается по данным за день.</p>
-        <p>Себестоимость, свои расходы и налоги берутся из настроек. Для прогноза Ozon налог от выручки и НДС оцениваются по цене покупателя при полном покрытии. Иначе действует база из настроек. Маржа считается от выручки, ROI — от себестоимости. Итоги прибыли включают дни, по которым есть данные для расчёта по всем выбранным магазинам. Продажи и реклама показываются по мере поступления отчётов.</p>
-        <p>Остатки — последний снимок по каждому магазину. Стоимость считается только для доступного остатка. Запас в днях делит остаток на средние продажи за дни с начислениями по всем выбранным магазинам. Прочерк означает, что данных для расчёта нет.${product ? " Расходы без артикула входят в сводку магазина." : ""}</p>
+        <p>Цена покупателя и соинвест считаются по сопоставимым парам цен, взвешенным по количеству. Для WB цена покупателя указана без скидки WB Кошелька. У соинвеста Ozon за 7 дней итог показывает последний рассчитанный день. ДРР делит расходы на заказы или продажи по совпадающим дням и магазинам. Заказы показаны без отмен, продажи — за вычетом возвратов.</p>
+        <p>Фактическая прибыль берётся из начислений и настроек. Для WB прогноз использует 28 дней начислений и оценку выкупа по связанным заказам. Последние 14 дней исключены из оценки выкупа, чтобы дать заказам время на доставку и возврат.</p>
+        <p>Для Ozon используются ноябрьские формулы PULSTAT. В расчёт входят комиссия, эквайринг, совокупный налог УСН и НДС, себестоимость с браком, тариф логистики, наценка за нелокальную продажу, доставка до ПВЗ, обработка возврата и реклама. Цена для налога учитывает соинвест по доступным парам цен за семь дней. При отсутствии пар берётся цена продавца, как в образце. Маржа делится на ожидаемую выручку, ROI — на ожидаемую себестоимость. Сводка прогноза суммирует рассчитанные позиции.</p>
+        <p>Показатели воронки и рекламы берутся из отчётов. Уникальные посетители в сводке — сумма по товарам и дням, один человек может входить несколько раз. Переходы в карточку WB выводятся отдельно от уникальных посетителей. Время доставки WB берётся из воронки продаж, время Ozon — из доставленных отправлений с обеими датами.</p>
+        <p>В каждой дате показан снимок остатков, итог берётся по последнему снимку каждого товара за период. Оценка стоимости включает товар в пути к покупателю, когда по нему есть данные. Прочерк означает, что данных для расчёта нет.${product ? " Расходы без артикула входят в сводку магазина." : ""}</p>
       </details>`;
-    app.querySelector("#rnp-product").addEventListener("change", (e) => {
-      const value = e.target.value;
-      if (value) q.set("product", value);
-      else q.delete("product");
-      location.hash = "#/rnp" + (q.size ? "?" + q : "");
-    });
+    for (const [control, param] of [["scope", "scope"], ["period", "period"], ["end", "to"], ["product", "product"], ["items", "items"]]) {
+      app.querySelector("#rnp-" + control).addEventListener("change", (event) => {
+        const value = control === "items" ? (event.target.checked ? "all" : "") : event.target.value;
+        if (value) q.set(param, value);
+        else q.delete(param);
+        if (control === "scope") q.delete("product");
+        location.hash = "#/rnp" + (q.size ? "?" + q : "");
+      });
+    }
+    bindPulstatSettings();
+    bindRnpReports();
   }
 
   // ================= Настройки =================
@@ -1533,22 +1968,6 @@
     }
     return n;
   }
-  function parseCsv(text) {
-    text = text.replace(/^﻿/, "");
-    const first = text.split(/\r?\n/)[0] || "";
-    const sep = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ";" : first.includes("\t") ? "\t" : ",";
-    const rows = []; let row = [], cell = "", q = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
-      else if (ch === '"') q = true;
-      else if (ch === sep) { row.push(cell); cell = ""; }
-      else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
-      else cell += ch;
-    }
-    if (cell || row.length) { row.push(cell); rows.push(row); }
-    return rows;
-  }
   // Минимальное чтение .xlsx: это zip-архив с XML внутри.
   async function parseXlsx(buf) {
     const dv = new DataView(buf), u8 = new Uint8Array(buf);
@@ -1589,7 +2008,7 @@
   // ================= Копия настроек =================
   function exportJson() {
     download(`unitka-kopiya-${todayIso()}.json`, JSON.stringify({ app: "unitka", version: 2, savedAt: new Date().toISOString(),
-      settings: { costs: state.costs, tax: state.tax, ozonTaxForecast: state.ozonTaxForecast, vat: state.vat, internal: state.internal, thresholds: state.thresholds } }, null, 2), "application/json");
+      settings: { costs: state.costs, tax: state.tax, ozonTaxForecast: state.ozonTaxForecast, vat: state.vat, internal: state.internal, thresholds: state.thresholds, pulstat: state.pulstat } }, null, 2), "application/json");
     toast("Копия данных скачана");
   }
   function importJson(text) {
@@ -1602,6 +2021,7 @@
     if (s.thresholds) state.thresholds = { margin: num(s.thresholds.margin, 15), drr: num(s.thresholds.drr, 20) };
     state.ozonTaxForecast = s.ozonTaxForecast === true;
     state.vat = cleanVat(s.vat); state.internal = cleanMoney(s.internal);
+    if (s.pulstat) state.pulstat = cleanPulstat(s.pulstat);
     save(); render(); toast("Копия загружена");
   }
 

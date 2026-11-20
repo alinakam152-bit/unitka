@@ -5,10 +5,12 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeHttp } from "./lib.mjs";
+import { day, daysAgo, makeHttp } from "./lib.mjs";
+import reports from "../rnp-data.js";
 import { collectWB } from "./wb.mjs";
 import { collectOzon } from "./ozon.mjs";
 import { encrypt, decrypt } from "./crypto.mjs";
+const { indexRnpRows, bestPriceRows } = reports;
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -41,7 +43,20 @@ async function main() {
   }
 
   const http = makeHttp(fetchImpl, log);
-  const data = { v: 1, generatedAt: now.toISOString(), demo: DEMO, stores: [], products: [], stocks: {}, orders: [], ordersFbs: [], ordH: [], orderPrices: [], orderFinFbo: [], orderFinFbs: [], orderAverages: [], fin: [], ads: [] };
+  const data = { v: 1, generatedAt: now.toISOString(), demo: DEMO, stores: [], products: [], stocks: {}, orders: [], ordersFbs: [], ordH: [], orderPrices: [], orderFinFbo: [], orderFinFbs: [], orderAverages: [], fin: [], ads: [], funnel: [], orderReport: [], stockHistory: [] };
+  const oldest = daysAgo(90, now);
+  const snapshotDate = day(now);
+  const history = (rows) => indexRnpRows((rows || []).filter((row) => row[0] >= oldest));
+  const stockHistory = history(prev?.stockHistory);
+  const funnel = history(prev?.funnel);
+  const orderReport = history(prev?.orderReport);
+  for (const p of prev?.products || []) {
+    const s = prev.stocks?.[p.pid];
+    const store = prev.stores?.find((entry) => entry.id === p.store);
+    if (!s || !store?.updatedAt) continue;
+    const date = day(store.updatedAt), row = [date, p.pid, { stock: s.fbo + s.fbs, price: p.price }];
+    if (date >= oldest && !stockHistory.has(JSON.stringify(row.slice(0, 2)))) stockHistory.set(JSON.stringify(row.slice(0, 2)), row);
+  }
 
   for (const st of stores) {
     log(`Магазин «${st.name}» (${st.mp})`);
@@ -55,16 +70,18 @@ async function main() {
       } else if (st.mp === "ozon") {
         const cid = env[st.clientId], key = env[st.apiKey];
         if (!cid || !key) throw new Error(`нет ключей ${st.clientId} / ${st.apiKey} в Secrets`);
-        part = await collectOzon(st, cid, key, { http, log, now });
+        part = await collectOzon(st, cid, key, { http, log, fetchFile: fetchImpl, now, pause });
       }
-      Object.assign(meta, { ok: true, updatedAt: now.toISOString(), finTo: part.finTo, warnings: part.warnings, tokenExpires: part.tokenExpires });
+      Object.assign(meta, { ok: true, updatedAt: now.toISOString(), finTo: part.finTo, finFrom: part.finFrom,
+        orderFrom: part.orderFrom, warnings: part.warnings, tokenExpires: part.tokenExpires, stockPartial: !!part.stockPartial });
     } catch (e) {
       log(`  ОШИБКА: ${e.message}`);
       meta.warnings.push(`Данные не обновились: ${e.message}`);
       const old = prev && takeStore(prev, st.id);
       if (old) {
         part = old.part;
-        Object.assign(meta, { updatedAt: old.meta.updatedAt, finTo: old.meta.finTo, tokenExpires: old.meta.tokenExpires });
+        Object.assign(meta, { updatedAt: old.meta.updatedAt, finTo: old.meta.finTo, finFrom: old.meta.finFrom,
+          orderFrom: old.meta.orderFrom, tokenExpires: old.meta.tokenExpires, stockPartial: old.meta.stockPartial, warnings: [...meta.warnings, ...(old.meta.warnings || [])] });
         meta.warnings.push("Показаны прошлые данные");
       }
     }
@@ -76,8 +93,27 @@ async function main() {
       data.orders.push(...part.orders); data.fin.push(...part.fin); data.ads.push(...part.ads);
       for (const field of ["orderFinFbo", "orderFinFbs", "orderAverages", "orderPrices"]) data[field] = data[field].concat(part[field] || []);
       data.ordersFbs.push(...(part.ordersFbs || [])); data.ordH.push(...(part.ordH || []));
+      for (const [date, id, values] of part.funnel || []) {
+        const entry = JSON.stringify([date, id]);
+        funnel.set(entry, [date, id, { ...funnel.get(entry)?.[2],
+          ...Object.fromEntries(Object.entries(values).filter(([, value]) => Number.isFinite(value))) }]);
+      }
+      for (const row of part.orderReport || []) orderReport.set(JSON.stringify(row.slice(0, 2)), row);
+      if (meta.ok && part.stocks) for (const p of part.products) {
+        const s = part.stocks[p.pid];
+        if (!s) continue;
+        const transit = Number.isFinite(s.toClient) && !(st.mp === "wb" && part.stockPartial) ? s.toClient : null;
+        stockHistory.set(JSON.stringify([snapshotDate, p.pid]), [snapshotDate, p.pid, {
+          stock: s.fbo + s.fbs, transit, fromClient: st.mp === "wb" && !part.stockPartial ? s.fromClient : null,
+          price: p.price, stockPartial: !!part.stockPartial
+        }]);
+      }
     }
   }
+  data.funnel = [...funnel.values()];
+  data.orderReport = [...orderReport.values()];
+  data.orderPrices = bestPriceRows(data.orderPrices, data.orderReport);
+  data.stockHistory = [...stockHistory.values()];
 
   const enc = await encrypt(data, phrase);
   if (DEMO) {

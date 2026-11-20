@@ -17,6 +17,8 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
   const pid = (nm) => `${store.id}:${nm}`;
   const warnings = [];
   const out = { products: [], stocks: null, orders: [], ordersFbs: [], ordH: [], fin: [], ads: [], finTo: null, warnings, tokenExpires: jwtExpires(token) };
+  out.orderFrom = daysAgo(orderDays, now);
+  out.finFrom = daysAgo(finDays, now);
 
   // 1. Карточки товаров
   log("  карточки");
@@ -128,6 +130,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
 
   // 6. Остатки на складах WB (нужен доступ «Аналитика»)
   const stocks = {};
+  let hasWbWarehouseStock = false;
   try {
     log("  остатки WB");
     for (let offset = 0, guard = 0; guard < 100; guard++, offset += 1000) {
@@ -143,6 +146,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
       }
       if (items.length < 1000) break;
     }
+    hasWbWarehouseStock = true;
   } catch (e) {
     warnings.push(e.status === 403 ? "Остатки на складах WB: у ключа нет доступа «Аналитика»" : `Остатки WB: ${e.message}`);
   }
@@ -157,14 +161,60 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
         for (const s of res?.stocks || []) {
           const nm = chrtToNm.get(s.chrtId);
           if (nm == null) continue;
-          (stocks[pid(nm)] ||= { fbo: 0, fbs: 0, toClient: 0, fromClient: 0 }).fbs += num(s.amount);
+          (stocks[pid(nm)] ||= { fbo: 0, fbs: 0, toClient: hasWbWarehouseStock ? 0 : null, fromClient: hasWbWarehouseStock ? 0 : null }).fbs += num(s.amount);
         }
       }
     }
   } catch (e) { warnings.push(`Остатки FBS WB: ${e.message}`); }
   out.stocks = Object.keys(stocks).length ? stocks : null;
+  out.stockPartial = !hasWbWarehouseStock || warnings.some((warning) => warning.startsWith("Остатки FBS WB:"));
 
   out.products = [...prod.values()];
+  try {
+    const ids = [...prod.keys()].map(Number).filter(Number.isSafeInteger);
+    const funnel = [];
+    for (let i = 0; i < ids.length; i += 20) {
+      if (i) await sleep(pause / 3);
+      const response = await http(`${H.analytics}/api/analytics/v3/sales-funnel/products/history`, {
+        method: "POST", headers: auth, body: { selectedPeriod: { start: daysAgo(6, now), end: day(now) },
+          nmIds: ids.slice(i, i + 20), skipDeletedNm: false, aggregationLevel: "day" }
+      });
+      for (const item of Array.isArray(response) ? response : response?.data || []) {
+        const id = item.product?.nmId;
+        if (!id) continue;
+        for (const row of item.history || []) {
+          if (!row.date) continue;
+          funnel.push([row.date, pid(id), { opens: row.openCount, carts: row.cartCount,
+            funnelOrders: row.orderCount, funnelDelivered: row.buyoutCount, buyoutPercent: row.buyoutPercent }]);
+        }
+      }
+    }
+    out.funnel = funnel;
+  } catch (e) { warnings.push(`Воронка WB: ${e.message}`); }
+  try {
+    const date = daysAgo(1, now), past = daysAgo(2, now);
+    const rows = new Map((out.funnel || []).filter((row) => row[0] === date).map((row) => [row[1], row[2]]));
+    for (let page = 0; page < 10; page++) {
+      if (page) await sleep(pause / 3);
+      const response = await http(`${H.analytics}/api/analytics/v3/sales-funnel/products`, { method: "POST", headers: auth, body: {
+        selectedPeriod: { start: date, end: date }, pastPeriod: { start: past, end: past },
+        skipDeletedNm: false, orderBy: { field: "orderCount", mode: "desc" }, limit: 1000, offset: page * 1000
+      } });
+      const products = response?.data?.products || [];
+      for (const item of products) {
+        if (!item.product?.nmId) continue;
+        const stats = item.statistic?.selected, duration = stats?.timeToReady;
+        if (!duration || !(stats?.orderCount > 0)) continue;
+        const delivery = num(duration.days) + num(duration.hours) / 24 + num(duration.mins) / 1440;
+        if (delivery > 0) {
+          const id = pid(item.product.nmId);
+          if (rows.has(id)) rows.get(id).delivery = delivery;
+          else (out.funnel ||= []).push([date, id, { delivery, funnelOrders: stats.orderCount }]);
+        }
+      }
+      if (products.length < 1000) break;
+    }
+  } catch (e) { warnings.push(`Время доставки WB: ${e.message}`); }
   return out;
 }
 
