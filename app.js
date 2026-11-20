@@ -92,6 +92,7 @@
   const F = { date: 0, pid: 1, rev: 2, sold: 3, ret: 4, comm: 5, logi: 6, stor: 7, acc: 8, pen: 9, acq: 10, ads: 11, comp: 12, pay: 13, serviceLogi: 14 };
   const COST_KEYS = ["comm", "logi", "stor", "acc", "pen", "acq", "serviceLogi"];
   let D = null;           // расшифрованные данные
+  const RANGE = { ord: null, fin: null };
   const DAY = { home: null, fin: null, ord: null }; // выбранный в календаре день (режим «1 день»); null — по умолчанию
   let IX = null;          // индексы
 
@@ -103,6 +104,7 @@
     const finTos = D.stores.filter((s) => s.finTo).map((s) => s.finTo).sort();
     const minOf = (rows) => rows.reduce((m, r) => (r[0] < m ? r[0] : m), today);
     IX = { prod, stores, today, finTo: finTos[0] || addDays(today, -1), finToMax: finTos[finTos.length - 1] || addDays(today, -1), ordMin: minOf(D.orders), finMin: minOf(D.fin) };
+    RANGE.ord = null; RANGE.fin = null;
     DAY.home = null; DAY.fin = null; DAY.ord = null; UNIT = null;
   }
   const dayStr = (d) => new Date(d.getTime() + 3 * 3600e3).toISOString().slice(0, 10); // по Москве, как у площадок
@@ -360,6 +362,19 @@
     </div>`;
   }
   const clampDay = (d, min, max) => (d < min ? min : d > max ? max : d);
+  function rangePicker(kind, from, to, min) {
+    return `<form class="period-range" data-period-range="${kind}" aria-label="Выбор периода">
+      <label class="field">Начало периода<input name="from" type="date" value="${clampDay(from, min, IX.today)}" min="${min}" max="${IX.today}" required></label>
+      <label class="field">Конец периода<input name="to" type="date" value="${clampDay(to, min, IX.today)}" min="${min}" max="${IX.today}" required></label>
+      <button type="submit" class="btn primary">Применить</button>
+      <p class="rnp-range-error small" role="alert" hidden>Начало периода должно быть раньше конца или совпадать с ним.</p>
+    </form>`;
+  }
+  function customPeriod(kind) {
+    const range = RANGE[kind];
+    if (!range) return null;
+    return { ...range, n: Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86400e3) + 1 };
+  }
   // Какие магазины ещё не прислали отчёт за этот день (WB — раз в неделю)
   function noReportNote(day, orders = false) {
     const late = D.stores.filter((st) => (state.view.stores === "all" || state.view.stores === st.id) && (!st.finTo || st.finTo < day));
@@ -527,6 +542,7 @@
 
   // ================= Прибыль по товарам + ABC =================
   function finPeriod() {
+    if (RANGE.fin) return customPeriod("fin");
     const n = Number(state.view.fin) || 28;
     if (n === 1) { const d = clampDay(DAY.fin || IX.finToMax, IX.finMin, IX.today); return { n, from: d, to: d }; }
     return { n, from: addDays(IX.finTo, -(n - 1)), to: IX.finTo };
@@ -572,11 +588,12 @@
 
     app.innerHTML = `
       ${demoNote()}
-      <div class="head-row"><h1>Прибыль по товарам</h1>${seg("fin", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"], [90, "90 дней"]], n, "Период")}</div>
+      <div class="head-row"><h1>Прибыль по товарам</h1>${seg("fin", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"], [90, "90 дней"]], RANGE.fin ? "custom" : n, "Период")}</div>
       ${storeChips()}
-      ${n === 1 ? dayPicker("fin", to, IX.finMin, IX.today) + noReportNote(to) : ""}
+      ${rangePicker("fin", from, to, IX.finMin)}
+      ${n === 1 && !RANGE.fin ? dayPicker("fin", to, IX.finMin, IX.today) : ""}
       <p class="updated">По отчётам площадок за ${n === 1 ? dmy(to) : dm(from) + "–" + dm(to)}. ${D.stores.map((s) => `${esc(s.name)}: по ${dm(s.finTo)}`).join(" · ")}</p>
-      ${n !== 1 ? noReportNote(to) : ""}
+      ${noReportNote(to)}
       ${!taxRate() ? `<div class="banner small">Налог не указан — прибыль без налога. <a href="#/settings">Указать</a></div>` : ""}
       <section class="totals">
         <div><div class="k">Выручка ${metricHelp("rev", "Выручка")}</div><div class="v">${rub(tot.rev)}</div></div>
@@ -951,9 +968,11 @@
   ];
   function renderOrders() {
     const v = state.view;
-    const n = Number(v.ord) || 1, scheme = v.ordScheme || "all", unit = v.ordUnit === "qty" ? "qty" : "rub";
-    const day = n === 1 ? clampDay(DAY.ord || IX.today, IX.ordMin, IX.today) : null;
-    const to = day || IX.today, from = addDays(to, -(n - 1)), pFrom = addDays(from, -n), pTo = addDays(from, -1);
+    const preset = Number(v.ord) || 1, scheme = v.ordScheme || "all", unit = v.ordUnit === "qty" ? "qty" : "rub";
+    const day = preset === 1 && !RANGE.ord ? clampDay(DAY.ord || IX.today, IX.ordMin, IX.today) : null;
+    const end = day || IX.today;
+    const { n, from, to } = customPeriod("ord") || { n: preset, from: addDays(end, 1 - preset), to: end };
+    const pFrom = addDays(from, -n), pTo = addDays(from, -1);
     const cur = ordPeriod(from, to, scheme), prev = ordPeriod(pFrom, pTo, scheme);
     const T = cur.T, P = prev.T;
     const incomplete = T.unpriced > 0;
@@ -973,8 +992,9 @@
     const noCost = rows.filter((r) => r.noCost).length, noHist = rows.filter((r) => r.noHist).length;
     app.innerHTML = `
       ${demoNote()}
-      <div class="head-row"><h1>Заказы</h1>${seg("ord", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"]], n, "Период")}</div>
+      <div class="head-row"><h1>Заказы</h1>${seg("ord", [[1, "1 день"], [7, "7 дней"], [14, "14 дней"], [28, "28 дней"]], RANGE.ord ? "custom" : n, "Период")}</div>
       ${storeChips()}
+      ${rangePicker("ord", from, to, IX.ordMin)}
       <div class="ord-ctl">${seg("ord-scheme", [["all", "Все схемы"], ["fbo", "FBO"], ["fbs", "FBS"]], scheme, "Схема")}</div>
       ${day ? dayPicker("ord", day, IX.ordMin, IX.today) : ""}
       <p class="updated">${n === 1 ? `За ${dmy(to)}${to === IX.today ? " (день ещё идёт)" : ""}` : `За ${dm(from)}–${dm(to)}`} · % — к ${n === 1 ? dm(pTo) : `${dm(pFrom)}–${dm(pTo)}`}</p>
@@ -2127,11 +2147,13 @@
       if (act === "demo") return openDemo();
       if (act === "lock") { D = null; IX = null; location.hash = "#/"; return render(); }
       if (act === "store") { state.view.stores = v; listLimit = 50; save(); const r = route(); r.q.delete("store"); location.hash = "#/" + r.parts.join("/") + (String(r.q) ? "?" + r.q : ""); return render(); }
-      if (act === "home" || act === "fin") { state.view[act] = Number(v); save(); return render(); }
+      if (act === "home" || act === "fin" || act === "ord") {
+        if (act !== "home") RANGE[act] = null;
+        state.view[act] = Number(v); listLimit = 50; save(); return render();
+      }
       if (act === "day-set") { DAY[v] = b.dataset.day; return render(); }
       if (act === "day-step") { const cur = app.querySelector(`input[data-day="${v}"]`); if (cur) { DAY[v] = addDays(cur.value, Number(b.dataset.step)); return render(); } }
       if (act === "abc" || act === "report") { state.view[act] = v; save(); return render(); }
-      if (act === "ord") { state.view.ord = Number(v); save(); return render(); }
       if (act === "ord-scheme") { state.view.ordScheme = v; save(); return render(); }
       if (act === "ord-unit") { state.view.ordUnit = v; save(); return render(); }
       if (act === "sort") {
@@ -2161,6 +2183,25 @@
   document.addEventListener("keydown", (e) => {
     const tr = e.target.closest && e.target.closest("tr[data-item], tr[data-pid]");
     if (tr && !e.target.closest("button, a, input, select") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRow(tr); }
+  });
+  document.addEventListener("submit", (e) => {
+    const form = e.target;
+    if (!form.matches("form[data-period-range]")) return;
+    e.preventDefault();
+    const start = form.elements.from;
+    const from = start.value, to = form.elements.to.value;
+    if (from > to) {
+      form.querySelector('[role="alert"]').hidden = false;
+      start.focus();
+      return;
+    }
+    RANGE[form.dataset.periodRange] = { from, to };
+    listLimit = 50;
+    render();
+  });
+  document.addEventListener("input", (e) => {
+    const form = e.target.closest("form[data-period-range]");
+    if (form) form.querySelector('[role="alert"]').hidden = true;
   });
   document.addEventListener("change", (e) => {
     if (e.target.matches("input[data-day]") && e.target.value) { DAY[e.target.dataset.day] = e.target.value; return render(); }
