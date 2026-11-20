@@ -27,8 +27,8 @@
     ]
   },
   "checked": {
-    "rates": "2026-11-20T08:43+05:00",
-    "news": "2026-11-20T08:43+05:00"
+    "rates": "2026-11-20T14:50+05:00",
+    "news": "2026-11-20T14:50+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -44,16 +44,16 @@
             "date": "2026-11-19T18:30+05:00"
           },
           {
+            "title": "Tom Tailor сократил присутствие на Wildberries – Новости ритейла и розничной торговли",
+            "source": "Retail.ru",
+            "link": "https://news.google.com/rss/articles/CBMinwFBVV95cUxOZFVWUW10TjNkNkljYVE2ZzJjRUNTeWtVUXRsejVoem84bHUzUE92U3pad2pDVXpNTHIzNnBSQ2lHY2xhOFIyc0ZlYVE3bkZkQmtSdkNQVy02eG9jeVRidE5vcmRrdHJDQm44RVB6b2thMGdaS05MYkdYbFVtWmZfMHE5U1N3czZwYW45UzYxUDVtOTNKNXJwTkcyM0ZqVU0?oc=5",
+            "date": "2026-11-18T19:04+05:00"
+          },
+          {
             "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
             "source": "Sostav.ru",
             "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
             "date": "2026-11-17T23:51+05:00"
-          },
-          {
-            "title": "Wildberries намерен удвоить экспорт российских продавцов, превысивший 250 млрд рублей",
-            "source": "Альта-Софт",
-            "link": "https://news.google.com/rss/articles/CBMiU0FVX3lxTFBPUlc5UDltRW1ic0dOeWZUTDdaVGVZcDc5ZS03SmZXSG1Uc0lQSmE1UHk0QWZUTEVFWWNuRW5qZ3Ftb3RPejZiUDhHUHBsNDNLa0xz?oc=5",
-            "date": "2026-11-16T22:47+05:00"
           }
         ]
       },
@@ -61,6 +61,12 @@
         "mp": "ozon",
         "label": "Ozon",
         "items": [
+          {
+            "title": "Ozon продлил выгодные условия для продавцов одежды, обуви и аксессуаров до 31 января 2028 года",
+            "source": "CNews.ru",
+            "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTFBPa1VoOU92TlBDR0FqcC1KNmJhdWZBakJlNUh0UGhVbUo2bjlYVWQzQU5NVlU1QTVyMzdCel85NnJ3TVdzWWdqanJwd0lIak56MmtvTk1Hd3Fuc0F6R3pjSlJHMTY1VVQtRDRrc3JHVExwNGFWYmdzdl9xSFU?oc=5",
+            "date": "2026-11-20T08:56+05:00"
+          },
           {
             "title": "Льготы для fashion‑продавцов на Ozon сохранятся до 2028 года",
             "source": "Retail Life",
@@ -72,17 +78,11 @@
             "source": "rb.ru",
             "link": "https://news.google.com/rss/articles/CBMixgFBVV95cUxOeTBySk9TczVoMDJHT0gyZXZhV3JQZDMycEhENHVfUzJENERNb3EtS1RwOEE5NjBrZ3o4VW96TmZHLVl0QnBVbWFhT2tETkpWTm8weEVZa0ZqMlJid08xMi1iemdGYUJad2x4R3hKV3NwaDk5T2dFX3pwWkRMQjlyaXQwWkotV0FEbkg5N0c0OXhHYVV0OFI4b0c0Q0NrQUFDa05OTW9kRjFRNXhzbTVnTDVKUmdJUnhYaXpvWk9iQk9XSExmSUE?oc=5",
             "date": "2026-11-19T18:30+05:00"
-          },
-          {
-            "title": "Прогноз по цене акций Озона. Продавцы перехватывают инициативу",
-            "source": "БКС Экспресс",
-            "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE9XS29kdnNwR3hNdUJGc1YwU24tcEFnVE12Ry1jenZNZ3dRQnBVS252ZlB4Uk5iTUVZR3dOS3FjSEc0VU5tUjloWHc3alAzeXZfUy1LMmExZEJRZw?oc=5",
-            "date": "2026-11-19T16:20+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-20T08:43+05:00",
+  "updated_at": "2026-11-20T14:50+05:00",
   "errors": []
 }
