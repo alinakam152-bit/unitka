@@ -173,12 +173,13 @@ export async function collectOzon(store, clientId, apiKey, { http, log, fetchFil
   out.products = [...new Map([...prod.values()].map((p) => [p.pid, p])).values()];
   const offers = new Map(out.products.map((p) => [p.offerId, p.pid]));
   const resolve = (sku, offer) => prod.get(sku)?.pid || (offer ? offers.get(offer) : null);
-  try {
-    const report = await ozonOrderReport(post, fetchFile, resolve, now, pause);
-    out.orderReport = report.rows;
-    out.orderPrices = bestPriceRows(out.orderPrices, report.rows);
-    log("    Отчёт об отправлениях получен");
-  } catch (e) { warnings.push(`Отчёт об отправлениях Ozon: ${e.message}`); }
+  const orderReport = await ozonOrderReport(post, fetchFile, resolve, now, pause);
+  out.orderReport = orderReport.rows;
+  out.orderPrices = bestPriceRows(out.orderPrices, orderReport.rows);
+  for (const { scheme, error } of orderReport.failures) {
+    warnings.push(`Отчёт об отправлениях Ozon ${scheme.toUpperCase()}: ${error}`);
+  }
+  for (const scheme of orderReport.received) log(`    Отчёт об отправлениях ${scheme.toUpperCase()} получен`);
   try {
     out.funnel = await ozonFunnel(post, resolve, now, pause);
   } catch (e) { warnings.push(`Воронка Ozon: ${e.message}`); }
@@ -204,9 +205,27 @@ export async function collectOzon(store, clientId, apiKey, { http, log, fetchFil
 
 export async function ozonOrderReport(post, fetchFile, resolve, now, pause) {
   const from = daysAgo(36, now), to = daysAgo(0, now);
+  const seen = new Set(), days = new Map();
+  const failures = [], received = [];
+  for (const scheme of ["fbo", "fbs"]) {
+    try {
+      const rows = await ozonSchemeReport(post, fetchFile, resolve, now, pause, scheme, { from, to, seen });
+      received.push(scheme);
+      for (const [date, pid, values] of rows) {
+        const key = JSON.stringify([date, pid]);
+        if (!days.has(key)) days.set(key, [date, pid, {}]);
+        const combined = days.get(key)[2];
+        for (const [field, value] of Object.entries(values)) combined[field] = (combined[field] ?? 0) + value;
+      }
+    } catch (error) { failures.push({ scheme, error: error.message }); }
+  }
+  return { rows: [...days.values()], failures, received };
+}
+
+async function ozonSchemeReport(post, fetchFile, resolve, now, pause, scheme, options) {
   const created = await post("/v1/report/postings/create", { filter: {
-    processed_at_from: new Date(Date.parse(from + "T00:00:00+03:00")).toISOString(),
-    processed_at_to: now.toISOString(), delivery_schema: ["fbo", "fbs"]
+    processed_at_from: new Date(Date.parse(options.from + "T00:00:00+03:00")).toISOString(),
+    processed_at_to: now.toISOString(), delivery_schema: [scheme]
   } });
   const code = created?.result?.code ?? created?.code;
   if (!code) throw new Error("Ozon не вернул идентификатор отчёта");
@@ -216,7 +235,7 @@ export async function ozonOrderReport(post, fetchFile, resolve, now, pause) {
     const report = response?.result ?? response;
     if (report?.status === "waiting" || report?.status === "processing") continue;
     if (!report?.file) throw new Error("Ozon не сформировал файл отчёта");
-    return parseOzonReport(parseCsv(await readOzonReportFile(fetchFile, report.file)), resolve, { from, to });
+    return parseOzonReport(parseCsv(await readOzonReportFile(fetchFile, report.file)), resolve, options).rows;
   }
   throw new Error("отчёт ещё формируется");
 }

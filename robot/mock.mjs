@@ -121,13 +121,17 @@ export function mockFetch(now) {
           Math.floor(orders * 0.8), 0, Math.ceil(orders * 0.2), orders * 6];
         return { dimensions: [{ id: it.sku }, { id: date }], metrics: fields };
       })) } });
-    if (path === "/v1/report/postings/create") return ok({ result: { code: String(opts.headers["Client-Id"]) } });
-    if (path === "/v1/report/info") return ok({ result: { status: "success", file: `https://cdn.ozon.ru/demo-${body.code}.csv` } });
-    if (u.hostname === "cdn.ozon.ru" && /^\/demo-\d+\.csv$/.test(path)) {
+  if (path === "/v1/report/postings/create") {
+    if (body.filter.delivery_schema.length !== 1) return fail(400, "Expected exactly one delivery schema");
+    return ok({ result: { code: String(opts.headers["Client-Id"]) + "-" + body.filter.delivery_schema[0] } });
+  }
+  if (path === "/v1/report/info") return ok({ result: { status: "success", file: `https://cdn.ozon.ru/demo-${body.code}.csv` } });
+  if (u.hostname === "cdn.ozon.ru" && /^\/demo-\d+-fb[os]\.csv$/.test(path)) {
       const reportItems = ozItems[path.match(/\d+/)[0]];
       const rows = [["Номер отправления", "Принят в обработку", "Статус", "SKU", "Предельная цена", "Оплачено покупателем", "Количество", "Дата доставки"]];
       for (const date of eachDay(daysAgo(12, now), daysAgo(2, now))) for (const it of reportItems) {
-        for (const salt of [3, 5]) for (let i = 0; i < salesFor(it, date, salt); i++) {
+      const salt = path.endsWith("-fbo.csv") ? 3 : 5;
+      for (let i = 0; i < salesFor(it, date, salt); i++) {
           rows.push([`demo-${date}-${it.sku}-${salt}-${i}`, date + " 08:30:00", i === 2 ? "Отменён" : "Доставлен", it.sku,
             it.price, Math.round(it.price * 0.88), 1, new Date(Date.parse(date) + 172800000).toISOString().slice(0, 10) + " 09:30:00"]);
         }

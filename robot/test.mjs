@@ -25,25 +25,38 @@ await t("отчёт Ozon: новый заголовок, Москва, срав�
   assert.deepEqual(reports.bestPriceRows([["2026-11-19", "s:1", 1, 300, 260]], data.rows), [["2026-11-19", "s:1", 2, 600, 480]]);
 });
 
-await t("отчёт Ozon: формируем, ждём появления файла и не передаём реквизиты при загрузке", async () => {
-  const times = [], now = new Date("2026-11-20T10:00:00Z");
+await t("отчёт Ozon: запрашиваем FBO и FBS отдельно, ждём файл и объединяем цены", async () => {
+  const schemes = [], calls = new Map(), now = new Date("2026-11-20T10:00:00Z");
   const post = async (path, body) => {
-    times.push(path);
     if (path.endsWith("create")) {
-      assert.deepEqual(body.filter.delivery_schema, ["fbo", "fbs"]);
-      return { result: { code: "report" } };
+      assert.equal(body.filter.delivery_schema.length, 1);
+      const [scheme] = body.filter.delivery_schema;
+      schemes.push(scheme);
+      return { result: { code: scheme } };
     }
-    return times.length === 2 ? { result: { status: "waiting" } } :
-      { result: { status: "success", file: "https://cdn.ozon.ru/report.csv" } };
+    const attempts = (calls.get(body.code) ?? 0) + 1;
+    calls.set(body.code, attempts);
+    return attempts === 1 ? { result: { status: "waiting" } } :
+      { result: { status: "success", file: `https://cdn.ozon.ru/${body.code}.csv` } };
   };
   const file = async (url, options) => {
     assert.equal(url.hostname, "cdn.ozon.ru");
     assert.equal(options.headers, undefined);
-    return new Response("Номер отправления;Принят в обработку;Статус;SKU;Ваша цена;Оплачено покупателем;Количество\na;2026-11-19;Доставлен;1;100;80;1");
+    const id = url.pathname.slice(1, 4);
+    return new Response(`Номер отправления;Принят в обработку;Статус;SKU;Ваша цена;Оплачено покупателем;Количество\n${id};2026-11-19;Доставлен;1;100;80;1`);
   };
   const data = await ozonOrderReport(post, file, () => "s:1", now, 0);
-  assert.equal(data.rows[0][2].buyerAmount, 80);
-  assert.equal(times.length, 3);
+  assert.equal(data.rows[0][2].buyerAmount, 160);
+  assert.deepEqual(data.failures, []);
+  assert.deepEqual(schemes, ["fbo", "fbs"]);
+  assert.deepEqual([...calls.values()], [2, 2]);
+
+  const partial = await ozonOrderReport(async (path, body) => {
+    if (body.filter?.delivery_schema[0] === "fbs") throw new Error("нет FBS");
+    return post(path, body);
+  }, file, () => "s:1", now, 0);
+  assert.equal(partial.rows[0][2].buyerAmount, 80);
+  assert.deepEqual(partial.failures, [{ scheme: "fbs", error: "нет FBS" }]);
 });
 
 await t("РНП: Техлист сопоставляет артикулы, Unit сохраняет точные ставки группы", () => {
