@@ -1087,26 +1087,73 @@
   }
 
   // ================= РНП =================
-  function renderRnp(parts, q) {
-    const products = D.products.filter((p) => storeOk(p.pid));
-    const inStock = products.filter((p) => stockOf(p.pid) > 0)
-      .sort((a, b) => String(a.offerId || a.sku).localeCompare(String(b.offerId || b.sku), "ru", { numeric: true }));
-    const product = inStock.find((p) => p.pid === q.get("product"));
-    const dates = Array.from({ length: 14 }, (_, i) => addDays(IX.today, i - 13));
-    const byDate = new Map(dates.map((date) => [date, new Map()]));
-    const totals = {};
-    function add(target, values) {
-      for (const [metric, value] of Object.entries(values)) {
-        if (Number.isFinite(value)) target[metric] = (target[metric] ?? 0) + value;
+  const rnpRatio = (value, base) => Number.isFinite(value) && base > 0 ? value / base : null;
+
+  function addRnpValues(target, values) {
+    for (const [metric, value] of Object.entries(values)) {
+      if (Number.isFinite(value)) target[metric] = (target[metric] ?? 0) + value;
+    }
+  }
+
+  function rnpHistory(products) {
+    const end = addDays(IX.today, -14);
+    const start = addDays(end, -27);
+    const history = new Map(products.map((p) => [p.pid, {}]));
+    for (const [date, pid, qty, , cancelled] of D.orders) {
+      if (date >= start && date <= end && history.has(pid)) addRnpValues(history.get(pid), { orders: qty - cancelled });
+    }
+    for (const [date, pid, , , , , , , sold] of [...(D.orderFinFbo || []), ...(D.orderFinFbs || [])]) {
+      const finTo = IX.stores.get(storeOf(pid))?.finTo;
+      if (date >= start && date <= end && finTo >= end && history.has(pid)) {
+        addRnpValues(history.get(pid), { sold });
       }
     }
+    const fin = aggFin(addDays(IX.finToMax, -27), IX.finToMax, { allocate: false });
+    for (const [pid, values] of history) {
+      const row = fin.byP.get(pid);
+      const units = row ? row.sold - row.ret : 0;
+      values.buy = rnpRatio(values.sold, values.orders);
+      if (values.buy < 0 || values.buy > 1) values.buy = null;
+      values.commission = row && units > 0 ? rnpRatio(row.comm, row.rev) : null;
+      values.costPerSale = row ? rnpRatio(row.logi + internalFromReport(row), units) : null;
+    }
+    return history;
+  }
+
+  function rnpForecast(pid, row, history) {
+    if (!(row.orders > 0)) return { forecastProfit: row.spend == null ? null : -row.spend };
+    const cost = state.costs[IX.prod.get(pid)?.offerId];
+    if (row.unpriced || !(row.orderSum > 0) || row.spend == null || !Number.isFinite(state.tax.rate) ||
+        !Number.isFinite(cost) || history?.buy == null ||
+        (history.buy > 0 && (history.commission == null || history.costPerSale == null))) {
+      return { forecastMissing: 1 };
+    }
+    const units = row.orders * history.buy;
+    const revenue = row.orderSum * history.buy;
+    const cogs = units * cost;
+    const pre = revenue - revenue * (history.commission ?? 0) -
+      units * ((history.costPerSale ?? 0) + state.internal) - cogs - row.spend;
+    const ozon = IX.stores.get(storeOf(pid))?.mp === "ozon";
+    const taxRevenue = ozon && row.pairedQty === row.orders ? row.buyerAmount * history.buy :
+      revenue * (ozon && state.ozonTaxForecast && state.tax.base === "revenue" ? 0.8 : 1);
+    const vat = Math.max(0, taxRevenue) * vatShare();
+    const taxBase = state.tax.base === "profit" ? pre - vat : taxRevenue - vat;
+    return { forecastProfit: pre - vat - Math.max(0, taxBase) * taxRate(), forecastRevenue: revenue, forecastCogs: cogs };
+  }
+
+  function rnpColumns(selected, product) {
+    const dates = Array.from({ length: 14 }, (_, i) => addDays(IX.today, i - 13));
+    const byDate = new Map(dates.map((date) => [date, new Map()]));
+    const storeIds = product ? [storeOf(product.pid)] : D.stores.filter((store) => storeOk("*" + store.id)).map((store) => store.id);
+    const visibleStores = new Set(storeIds);
+    const history = rnpHistory(selected);
+    const totals = {};
     function collect(rows, values) {
       for (const row of rows) {
-        const stores = byDate.get(row[0]);
-        if (!stores || !storeOk(row[1]) || (product && row[1] !== product.pid)) continue;
-        const id = storeOf(row[1]);
-        if (!stores.has(id)) stores.set(id, {});
-        add(stores.get(id), values(row));
+        const items = byDate.get(row[0]);
+        if (!items || !visibleStores.has(storeOf(row[1])) || (product && row[1] !== product.pid)) continue;
+        if (!items.has(row[1])) items.set(row[1], {});
+        addRnpValues(items.get(row[1]), values(row));
       }
     }
     collect(D.orders, (r) => ({
@@ -1114,35 +1161,131 @@
       unpriced: r[6] ?? (r[3] === 0 && IX.prod.get(r[1])?.mp === "ozon" ? r[2] - r[4] : 0)
     }));
     collect(D.orderPrices || [], (r) => ({ pairedQty: r[2], sellerAmount: r[3], buyerAmount: r[4] }));
+    for (const linked of [D.orderFinFbo, D.orderFinFbs]) {
+      collect(linked || [], (r) => r[2] > 0 ? { linkedOrders: r[2], linkedSales: r[8] } : {});
+    }
+    const finFields = Object.entries(F).slice(2).filter(([field]) => field !== "ads");
     collect(D.fin, (r) => {
       const store = IX.stores.get(storeOf(r[1]));
       const covered = store?.finTo && r[0] <= store.finTo;
       return {
         sales: covered ? r[F.rev] : null,
         units: covered ? r[F.sold] - r[F.ret] : null,
-        spend: covered && store.mp === "ozon" ? r[F.ads] ?? 0 : null
+        spend: covered && store.mp === "ozon" ? r[F.ads] ?? 0 : null,
+        ozonSpend: covered && store.mp === "ozon" ? r[F.ads] ?? 0 : null,
+        ...Object.fromEntries(finFields.map(([field, i]) => [field, covered ? r[i] ?? 0 : null]))
       };
     });
     collect(D.ads || [], (r) => ({ impressions: r[3], clicks: r[4], wbSpend: r[2], spend: r[2] }));
     const columns = dates.map((date) => {
       const day = {};
-      for (const store of byDate.get(date).values()) {
-        add(day, store);
-        if (store.spend != null && store.orderSum != null && !store.unpriced) {
-          add(day, { orderSpend: store.spend, matchedOrders: store.orderSum });
+      const stores = new Map(storeIds.map((id) => {
+        const store = IX.stores.get(id);
+        const ordersCovered = store.updatedAt && date <= dayStr(new Date(store.updatedAt));
+        const finCovered = date <= store.finTo;
+        const wbAdsCovered = store.mp === "wb" && ordersCovered &&
+          store.ok && Array.isArray(D.ads) && !store.warnings?.some((warning) => warning.startsWith("Реклама WB:"));
+        return [id, { values: {}, finCovered, ordersCovered, adsCovered: store.mp === "ozon" ? finCovered : wbAdsCovered }];
+      }));
+      for (const [pid, row] of byDate.get(date)) {
+        const store = stores.get(storeOf(pid));
+        if (store.adsCovered) row.spend ??= 0;
+        addRnpValues(store.values, row);
+        addRnpValues(day, rnpForecast(pid, row, history.get(pid)));
+        if (row.orders > 0) {
+          const buy = history.get(pid)?.buy;
+          addRnpValues(day, buy == null ? { unknownBuy: row.orders } : { expectedUnits: row.orders * buy });
         }
-        if (store.spend != null && store.sales != null) {
-          add(day, { salesSpend: store.spend, matchedSales: store.sales });
+        if (store.finCovered && (row.rev || row.units || row.spend || COST_KEYS.some((field) => row[field]) || row.comp)) {
+          const fact = Object.fromEntries(Object.keys(F).slice(2).map((field) => [field, row[field] ?? 0]));
+          fact.ads = row.spend ?? 0;
+          const result = calc(pid, fact);
+          const missing = !store.adsCovered || !Number.isFinite(state.tax.rate) ||
+            (result.cost == null && result.units !== 0);
+          addRnpValues(day, missing ? { factMissing: 1 } : { factProfit: result.profit, factRevenue: result.rev });
         }
       }
-      add(totals, day);
+      for (const [id, { values: store, finCovered, ordersCovered, adsCovered }] of stores) {
+        if (ordersCovered) {
+          store.orders ??= 0;
+          store.orderSum ??= 0;
+        }
+        if (finCovered) {
+          store.sales ??= 0;
+          store.units ??= 0;
+        }
+        if (adsCovered) {
+          store.spend ??= 0;
+          if (IX.stores.get(id).mp === "ozon") store.ozonSpend ??= 0;
+        }
+        addRnpValues(day, store);
+        if (store.spend != null && store.orderSum != null && !store.unpriced) {
+          addRnpValues(day, { orderSpend: store.spend, matchedOrders: store.orderSum });
+        }
+        if (store.spend != null && store.sales != null) {
+          addRnpValues(day, { salesSpend: store.spend, matchedSales: store.sales });
+        }
+        if (!finCovered) addRnpValues(day, { factUnclosed: 1 });
+        else if (!adsCovered) addRnpValues(day, { factMissing: 1 });
+        if (!adsCovered) addRnpValues(day, { adsUnclosed: 1 });
+        if (!adsCovered || !ordersCovered) addRnpValues(day, { forecastMissing: 1 });
+      }
+      const { factProfit, factRevenue, factMissing, factUnclosed, forecastProfit, forecastRevenue, forecastCogs, forecastMissing, adsUnclosed, ...metrics } = day;
+      addRnpValues(totals, metrics);
+      if (!factUnclosed && day.sales != null) addRnpValues(totals, { stockDays: 1, stockSales: day.units });
+      if (!factMissing && !factUnclosed && day.sales != null) {
+        day.factProfit = factProfit ?? 0;
+        day.factRevenue = factRevenue ?? 0;
+        addRnpValues(totals, { factProfit: day.factProfit, factRevenue: day.factRevenue, factDays: 1 });
+      }
+      if (!forecastMissing && day.orders != null) {
+        day.forecastProfit = forecastProfit ?? 0;
+        addRnpValues(totals, { forecastProfit: day.forecastProfit, forecastRevenue, forecastCogs, forecastDays: 1 });
+      }
       return day;
     });
-    for (const p of product ? [product] : products) {
+    const snapshots = dates.map(() => ({}));
+    for (const p of selected) {
       const stock = stockOf(p.pid);
-      if (stock != null) add(totals, { stock, inStock: Number(stock > 0), listed: 1 });
+      if (stock == null) continue;
+      const store = IX.stores.get(storeOf(p.pid));
+      const updated = store?.updatedAt ? dayStr(new Date(store.updatedAt)) : null;
+      const transit = store?.mp === "wb" && !store.warnings?.some((warning) => warning.startsWith("Остатки WB:"))
+        ? D.stocks[p.pid].toClient : null;
+      const cost = state.costs[p.offerId];
+      const snapshot = {
+        stock, inStock: Number(stock > 0), listed: 1, transit,
+        stockCost: stock === 0 || Number.isFinite(cost) ? stock * (cost ?? 0) : null,
+        stockMissingCost: stock > 0 && !Number.isFinite(cost) ? 1 : 0,
+        stockValue: stock === 0 || p.price > 0 ? stock * (p.price ?? 0) : null,
+        stockMissingPrice: stock > 0 && !(p.price > 0) ? 1 : 0
+      };
+      addRnpValues(totals, snapshot);
+      const index = dates.indexOf(updated);
+      if (index >= 0) addRnpValues(snapshots[index], snapshot);
     }
-    const ratio = (a, b) => a != null && b > 0 ? a / b : null;
+    snapshots.forEach((snapshot, i) => addRnpValues(columns[i], snapshot));
+    return { dates, columns, totals };
+  }
+
+  function renderRnp(parts, q) {
+    const products = D.products.filter((p) => storeOk(p.pid));
+    const inStock = products.filter((p) => stockOf(p.pid) > 0)
+      .sort((a, b) => String(a.offerId || a.sku).localeCompare(String(b.offerId || b.sku), "ru", { numeric: true }));
+    const product = inStock.find((p) => p.pid === q.get("product"));
+    const { dates, columns, totals } = rnpColumns(product ? [product] : products, product);
+    const ratio = rnpRatio;
+    const factProfit = (c) => c.factMissing || c.factUnclosed ? null : c.factProfit;
+    const forecastProfit = (c) => c.forecastMissing ? null : c.forecastProfit;
+    const factMargin = (c) => ratio(factProfit(c), c.factRevenue);
+    const forecastMargin = (c) => ratio(forecastProfit(c), c.forecastRevenue);
+    const forecastRoi = (c) => ratio(forecastProfit(c), c.forecastCogs);
+    const buyRate = (c) => c.unknownBuy ? null : ratio(c.expectedUnits, c.orders);
+    const stockDays = (c) => ratio(c.stock, totals.stockDays > 0 ? totals.stockSales / totals.stockDays : null);
+    const linkedBuy = (c) => c.linkedSales >= 0 && c.linkedSales <= c.linkedOrders ? ratio(c.linkedSales, c.linkedOrders) : null;
+    const orderDrr = (c) => c.adsUnclosed ? null : ratio(c.orderSpend, c.matchedOrders);
+    const salesDrr = (c) => c.adsUnclosed || c.factUnclosed ? null : ratio(c.salesSpend, c.matchedSales);
+    const money2 = (value) => value == null ? "—" : value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
     const rows = [
       ["Продажи и остатки", [
         ["Заказы, ₽", (c) => c.unpriced ? null : c.orderSum], ["Продажи, ₽", (c) => c.sales],
@@ -1150,36 +1293,52 @@
         ["Продажи, шт.", (c) => c.units], ["Средняя цена заказа, ₽", (c) => c.unpriced ? null : ratio(c.orderSum, c.orders)],
         ["Цена для покупателя, ₽", (c) => ratio(c.buyerAmount, c.pairedQty), money2],
         ["Соинвест, %", (c) => ratio(c.sellerAmount - c.buyerAmount, c.sellerAmount), pct],
-        ["Товары в пути, шт."],
+        ["К покупателям · WB, шт.", (c) => c.transit],
         ["Доступно к продаже, шт.", (c) => c.stock],
         ["Артикулы в наличии / с данными", (c) => c.listed ? `${int(c.inStock)} / ${int(c.listed)}` : null],
-        ["Среднее время доставки"], ["Оборачиваемость, дни"]
+        ["Среднее время доставки"], ["Запас по темпу продаж, дни", stockDays]
       ]],
       ["Воронка", [
         ["Средняя позиция в поиске"], ["Частота показов"], ["Уникальные посетители"],
         ["Добавления в корзину"], ["CTR общий, %"], ["CR в корзину, %"],
         ["CR в заказ, %"], ["CR показы → заказы, %"], ["Доля некатегорийного трафика, %"],
-        ["Выкуп за день, %"], ["Выкуп за месяц, %"]
+        ["Выкуп по связанным заказам, %", linkedBuy, pct], ["Оценка выкупа по истории, %", buyRate, pct]
       ]],
       ["Реклама", [
         ["Показы · WB", (c) => c.impressions], ["Клики · WB", (c) => c.clicks],
         ["CTR · WB, %", (c) => ratio(c.clicks, c.impressions), pct],
         ["CPC · WB, ₽", (c) => ratio(c.wbSpend, c.clicks), money2],
         ["Расход · WB, ₽", (c) => c.wbSpend],
-        ["Реклама итого, ₽", (c) => c.spend, int, "emphasis"],
-        ["ДРР от заказов, %", (c) => ratio(c.orderSpend, c.matchedOrders), pct, "drr"],
-        ["ДРР от продаж, %", (c) => ratio(c.salesSpend, c.matchedSales), pct, "drr"]
+        ["Расход · Ozon, ₽", (c) => c.ozonSpend],
+        ["Реклама итого, ₽", (c) => c.adsUnclosed ? null : c.spend, int, "emphasis"],
+        ["ДРР от заказов, %", orderDrr, pct, "drr"],
+        ["ДРР от продаж, %", salesDrr, pct, "drr"]
+      ]],
+      ["Прибыль по начислениям", [
+        ["Чистая прибыль, ₽", factProfit, int, "profit"],
+        ["Маржа, %", factMargin, pct, "margin"]
+      ]],
+      ["Прогноз по заказам", [
+        ["Ожидаемая выручка, ₽", (c) => c.forecastMissing ? null : c.forecastRevenue],
+        ["Ожидаемая прибыль, ₽", forecastProfit, int, "profit"],
+        ["Ожидаемая маржа, %", forecastMargin, pct, "margin"],
+        ["Ожидаемый ROI, %", forecastRoi, pct, "profit"]
+      ]],
+      ["Стоимость доступного остатка", [
+        ["По себестоимости, ₽", (c) => c.stockMissingCost ? null : c.stockCost],
+        ["По цене продавца, ₽", (c) => c.stockMissingPrice ? null : c.stockValue]
       ]]
     ];
-    function money2(value) {
-      return value == null ? "—" : value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
-    }
     function rowHtml([label, value = () => null, format = int, kind = ""]) {
       function cell(column, total = false) {
         const v = value(column);
-        const tone = kind === "drr" && v != null
-          ? (v > state.thresholds.drr / 100 ? " rnp-high" : " rnp-good")
-          : "";
+        let tone = "";
+        if (v != null) {
+          if (kind === "drr") tone = v > state.thresholds.drr / 100 ? " rnp-high" : " rnp-good";
+          if (kind === "profit" || kind === "margin") {
+            tone = v < 0 ? " rnp-high" : kind === "margin" && v < state.thresholds.margin / 100 ? " rnp-low" : " rnp-good";
+          }
+        }
         return `<td class="${total ? "rnp-total" : ""}${tone}">${typeof v === "string" ? v : format(v)}</td>`;
       }
       return `<tr class="rnp-${kind}"><th scope="row">${label}</th>${cell(totals, true)}${columns.map((c) => cell(c)).join("")}</tr>`;
@@ -1197,8 +1356,13 @@
       </label>
       ${inStock.length ? "" : '<p class="muted small">Нет артикулов с подтверждённым положительным остатком.</p>'}
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
-      <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Последние дни могут быть неполными.</p>
-      <p class="muted small">Цена покупателя и соинвест рассчитаны по ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт. с обеими ценами. Соинвест = разница между суммами по ценам продавца и покупателя ÷ сумма по ценам продавца. Для WB цена покупателя показана без скидки за оплату WB Кошельком.</p>
+      <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Даты отчётов по Москве</p>
+      <div class="rnp-summary">
+        <div><span>Чистая прибыль · ${totals.factDays ?? 0} из ${dates.length} дн.</span><strong class="${factProfit(totals) == null ? "" : signCls(factProfit(totals))}">${rub(factProfit(totals))}</strong></div>
+        <div><span>Ожидаемая прибыль · ${totals.forecastDays ?? 0} из ${dates.length} дн.</span><strong class="${forecastProfit(totals) == null ? "" : signCls(forecastProfit(totals))}">${rub(forecastProfit(totals))}</strong></div>
+        <div><span>ДРР от продаж</span><strong>${pct(salesDrr(totals))}</strong></div>
+      </div>
+      ${!Number.isFinite(state.tax.rate) ? '<p class="banner small">Укажи ставку налога, чтобы увидеть прибыль. <a href="#/settings">Настройки</a></p>' : ""}
       <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
         <table class="rnp-table" aria-label="РНП за 14 дней">
           <thead><tr><th scope="col">Показатель</th><th scope="col" class="rnp-total">За период</th>${dates.map((date) =>
@@ -1206,7 +1370,13 @@
           ${rows.map(([label, items]) => `<tbody><tr class="rnp-section"><th scope="rowgroup">${label}</th><td class="rnp-total"></td><td colspan="${dates.length}"></td></tr>${items.map(rowHtml).join("")}</tbody>`).join("")}
         </table>
       </div>
-      <p class="muted small">Прочерк — данных нет. Остатки в итоговом столбце — последний доступный снимок. Заказы показаны без отмен, продажи — за вычетом возвратов. Для ДРР берутся дни, где есть и расходы на рекламу, и сумма заказов или продаж. Красный цвет — ДРР выше порога в настройках.${product ? " Общие расходы без артикула показаны в сводке по магазину." : ""}</p>`;
+      <details class="rnp-method">
+        <summary>Как считаются показатели</summary>
+        <p>Заказы показаны без отмен, продажи — за вычетом возвратов. ДРР за период делит расходы на заказы или продажи за совпадающие дни по каждому магазину. Цена покупателя и соинвест рассчитаны по ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт. с обеими ценами. Для WB цена покупателя указана без скидки WB Кошелька.</p>
+        <p>Факт берётся из отчётов о начислениях. Для прогноза сумма заказов умножается на оценку выкупа по связанным продажам за 28 дней. Последние 14 дней исключены из оценки, чтобы дать заказам время на доставку и возврат. Комиссия, логистика, эквайринг и прочие расходы оцениваются по последним 28 дням начислений. Реклама вычитается по данным за день.</p>
+        <p>Себестоимость, свои расходы и налоги берутся из настроек. Для прогноза Ozon налог от выручки и НДС оцениваются по цене покупателя при полном покрытии. Иначе действует база из настроек. Маржа считается от выручки, ROI — от себестоимости. Итоги прибыли включают дни, по которым есть данные для расчёта по всем выбранным магазинам. Продажи и реклама показываются по мере поступления отчётов.</p>
+        <p>Остатки — последний снимок по каждому магазину. Стоимость считается только для доступного остатка. Запас в днях делит остаток на средние продажи за дни с начислениями по всем выбранным магазинам. Прочерк означает, что данных для расчёта нет.${product ? " Расходы без артикула входят в сводку магазина." : ""}</p>
+      </details>`;
     app.querySelector("#rnp-product").addEventListener("change", (e) => {
       const value = e.target.value;
       if (value) q.set("product", value);

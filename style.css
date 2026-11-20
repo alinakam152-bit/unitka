@@ -282,6 +282,26 @@ tr.r-loss td { background: color-mix(in srgb, var(--loss-soft) 45%, transparent)
   background: #eee6fa;
   overflow-wrap: anywhere;
 }
+.rnp-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.rnp-summary > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #f4effb;
+  border: 1px solid #d9cdeb;
+  border-radius: 8px;
+}
+.rnp-summary span { font-size: .8rem; color: #514266; }
+.rnp-summary strong { font-size: clamp(.95rem, 2vw, 1.3rem); }
+.rnp-method { margin: 12px 0; font-size: .85rem; color: var(--ink-2); }
+.rnp-method summary { cursor: pointer; font-weight: 600; }
+.rnp-method p { max-width: 82ch; margin-block: 8px; }
 .rnp-scroll {
   max-height: min(70vh, 660px);
   overflow: auto;
@@ -340,10 +360,13 @@ tr.r-loss td { background: color-mix(in srgb, var(--loss-soft) 45%, transparent)
   z-index: 3;
 }
 .rnp-table .rnp-section :is(th, td) { background: #e1dce8; border-top: 2px solid #423851; }
-.rnp-table .rnp-emphasis :is(th, td), .rnp-table .rnp-drr :is(th, td) { font-weight: 600; }
+.rnp-table :is(.rnp-emphasis, .rnp-drr, .rnp-profit, .rnp-margin) :is(th, td) { font-weight: 600; }
 .rnp-table .rnp-good { background: #c5e1b8; }
 .rnp-table .rnp-high { background: #f1b3ae; }
+.rnp-table .rnp-low { background: #ffe1a9; }
 @media (max-width: 480px) {
+  .rnp-summary { gap: 5px; }
+  .rnp-summary > div { padding: 7px; }
   .rnp-table { --rnp-label: 144px; font-size: .75rem; }
   .rnp-table :is(th, td) { min-width: 68px; padding: 5px; }
   .rnp-table .rnp-total { min-width: 68px; }
