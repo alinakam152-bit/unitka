@@ -1242,6 +1242,7 @@
   function rnpColumns(selected, product, storeIds, dates, imports) {
     const byDate = new Map(dates.map((date) => [date, new Map()]));
     const visibleStores = new Set(storeIds);
+    const positionDays = new Map(storeIds.map((id) => [id, 0]));
     const history = rnpHistory(selected);
     const totals = {};
     const reportIndex = indexRnpRows(D.orderReport || []);
@@ -1405,6 +1406,7 @@
         }
       }
       for (const [id, { values: store, finCovered, ordersCovered, adsCovered }] of stores) {
+        if (store.positionWeight > 0) positionDays.set(id, positionDays.get(id) + 1);
         if (ordersCovered) {
           store.orders ??= 0;
           store.orderSum ??= 0;
@@ -1489,7 +1491,7 @@
       if (lastSnapshot.get(pid)?.date <= date || !lastSnapshot.has(pid)) lastSnapshot.set(pid, { date, snapshot });
     }
     for (const { snapshot } of lastSnapshot.values()) addRnpValues(totals, snapshot);
-    return { dates, columns, totals };
+    return { dates, columns, totals, positionDays };
   }
 
   function pulstatFields(fields, values) {
@@ -1558,7 +1560,7 @@
   }
 
   function rnpReportControls(stores) {
-    return `<details class="rnp-method pulstat-settings">
+    return `<details class="rnp-method pulstat-settings" id="rnp-reports">
       <summary>Загрузить данные РНП из отчёта</summary>
       <p>Можно загрузить отчёт Ozon об отправлениях, лист «Техлист» с дневными показателями или параметры товаров из Unit. Для связки по названию сначала загрузи «Техлист». Отдельные отчёты FBO и FBS выбирай одновременно. Импорт применяется в этом браузере к выбранному магазину.</p>
       <form id="rnp-import" class="rnp-import">
@@ -1690,7 +1692,7 @@
     const dateFrom = custom ? requestedStart : addDays(dateTo, 1 - preset);
     const dayCount = (Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000 + 1;
     const wideDates = Array.from({ length: dayCount }, (_, i) => addDays(dateFrom, i));
-    const { dates, columns, totals } = rnpColumns(product ? [product] : products, product,
+    const { dates, columns, totals, positionDays } = rnpColumns(product ? [product] : products, product,
       product ? [storeOf(product.pid)] : [...visibleStores], wideDates, rnpImports());
     const ozonProducts = !product || product.mp === "ozon" ? products.filter((p) => p.mp === "ozon") : [];
     const ratio = rnpRatio;
@@ -1708,6 +1710,7 @@
     const pct2 = (value) => value == null ? "—" : value.toLocaleString("ru-RU", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\s/g, "");
     const quotient = (name) => (c) => ratio(c[name + "Value"], c[name + "Base"]);
     const dailyBuy = (c) => ratio(c.buyObservedTotal, c.buyObservedOrders) ?? linkedBuy(c);
+    const position = (c) => ratio(c.positionTotal, c.positionWeight);
     const missingPulstat = [
       ["pulstatMissingPrice", "цены заказа"], ["pulstatMissingAds", "данных о рекламе"],
       ["pulstatMissingCost", "себестоимости"], ["pulstatMissingInputs", "вводных магазина"], ["pulstatMissingProduct", "параметров артикула"]
@@ -1730,7 +1733,7 @@
         ["Оборачиваемость по темпу продаж, дни", stockDays, money2]
       ]],
       ["Воронка", [
-        ["Средняя позиция в поиске", (c) => ratio(c.positionTotal, c.positionWeight), money2],
+        ["Средняя позиция в поиске", position, money2],
         ["Показы, шт.", (c) => c.views], ["Частота показов", quotient("frequency"), money2],
         ["Уникальные посетители", (c) => c.visitors], ["Открытия карточки", (c) => c.opens],
         ["Уникальные посетители карточки", (c) => c.uniqueOpens],
@@ -1771,6 +1774,22 @@
         ["По цене продавца, ₽", (c) => c.stockMissingPrice ? null : c.stockValue]
       ]]
     ];
+    const daysWithValue = (value) => columns.filter((column) => value(column) != null).length;
+    const positionCoverage = daysWithValue(position);
+    const marketplaces = new Set([...positionDays.keys()].map((id) => IX.stores.get(id)?.mp));
+    const missingRows = rows.map(([section, items]) => [section, items
+      .filter(([label]) => (!label.includes(" · WB") || marketplaces.has("wb")) && (!label.includes(" · Ozon") || marketplaces.has("ozon")))
+      .map(([label, value]) => [label, daysWithValue(value)])
+      .filter(([, filled]) => filled < dates.length)]).filter(([, items]) => items.length);
+    const missingCount = missingRows.reduce((count, [, items]) => count + items.length, 0);
+    const gapSources = {
+      "Продажи и остатки": "Отчёты о заказах и начислениях, пары цен для соинвеста, снимки остатков и отчёты о доставке.",
+      "Воронка": "Отчёты о поиске и воронке по артикулам и датам. Для конверсий нужны обе исходные цифры.",
+      "Реклама": "Статистика кампаний и расходы по размещениям. Для ДРР нужны расходы и сумма заказов или продаж за те же дни.",
+      "Прибыль по начислениям": "Начисления, реклама, себестоимость и ставка налога.",
+      "Прогноз по заказам": "Цена заказа, реклама, себестоимость, выкуп и настройки расходов. Для Ozon проверь вводные PULSTAT и параметры Unit.",
+      "Стоимость запасов": "Снимок остатков, себестоимость или цена продавца."
+    };
     function rowHtml([label, value = () => null, format = int, kind = ""]) {
       function cell(column, total = false) {
         const v = value(column);
@@ -1812,11 +1831,23 @@
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
       <p class="updated">${dmy(dates[0])} — ${dmy(dateTo)} · Даты отчётов по Москве</p>
       <div class="rnp-summary">
+        <div class="rnp-position-card"><span>Средняя позиция в поиске · ${positionCoverage} из ${dates.length} дн.</span><strong>${positionCoverage ? money2(position(totals)) : "Нет данных"}</strong></div>
         <div><span>Чистая прибыль · ${totals.factDays ?? 0} из ${dates.length} дн.</span><strong class="${factProfit(totals) == null ? "" : signCls(factProfit(totals))}">${rub(factProfit(totals))}</strong></div>
         <div><span>Ожидаемая прибыль · ${int(totals.forecastOrders ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт.</span><strong class="${forecastProfit(totals) == null ? "" : signCls(forecastProfit(totals))}">${rub(forecastProfit(totals))}</strong></div>
         <div><span>Соинвест · ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт.</span><strong>${pct2(ratio(totals.sellerAmount - totals.buyerAmount, totals.sellerAmount))}</strong></div>
         <div><span>ДРР от продаж</span><strong>${pct(salesDrr(totals))}</strong></div>
       </div>
+      <details class="rnp-method pulstat-settings rnp-gaps">
+        <summary>${missingCount ? `Показатели с пропусками · ${int(missingCount)}` : "Показатели за период заполнены"}</summary>
+        <h2>Средняя позиция по магазинам</h2>
+        <ul>${[...positionDays].map(([id, filled]) => `<li>${esc(storeName(id))} · ${mpName(IX.stores.get(id)?.mp)} — ${filled} из ${dates.length} дн.</li>`).join("")}</ul>
+        ${marketplaces.has("wb") ? '<p><b>WB.</b> Источник — «Поисковые запросы: ваши товары». Для импорта нужны дата, артикул WB и средняя позиция за день.</p>' : ""}
+        ${marketplaces.has("ozon") ? '<p><b>Ozon.</b> Позиция приходит из аналитики Ozon, когда она доступна. Также её можно загрузить из «Техлиста» или дневного отчёта.</p>' : ""}
+        <button type="button" class="btn" id="rnp-open-reports">Открыть загрузку отчёта</button>
+        ${missingCount ? '<p>«0 из» означает, что за выбранный период значений нет. При частичном заполнении показано, сколько дней имеют значение. Ноль в таблице считается заполненным. В дни без показов или заказов некоторые проценты могут не рассчитываться.</p>' : ""}
+        ${missingRows.map(([section, items]) => `<h3>${section}</h3><p>${gapSources[section]}</p><ul>${items.map(([label, filled]) =>
+          `<li>${label} — ${filled} из ${dates.length} дн.</li>`).join("")}</ul>`).join("")}
+      </details>
       ${!Number.isFinite(state.tax.rate) ? '<p class="banner small">Для прибыли по начислениям укажи ставку налога в <a href="#/settings">настройках</a>.</p>' : ""}
       ${totals.partialFactDays ? `<p class="muted small">По прибыли есть неполные данные за ${int(totals.partialFactDays)} дн. В итог вошли только рассчитанные строки.</p>` : ""}
       ${totals.stockPartial ? '<p class="muted small">Часть снимков остатков загружена с неполным покрытием складов.</p>' : ""}
@@ -1885,6 +1916,11 @@
     }
     bindPulstatSettings();
     bindRnpReports();
+    app.querySelector("#rnp-open-reports").addEventListener("click", () => {
+      const reports = app.querySelector("#rnp-reports");
+      reports.open = true;
+      reports.querySelector("summary").focus();
+    });
   }
 
   // ================= Настройки =================
