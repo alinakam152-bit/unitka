@@ -1661,10 +1661,15 @@
     const showAll = q.get("items") === "all";
     const productList = showAll ? [...inStock, ...products.filter((p) => !(stockOf(p.pid) > 0))] : inStock;
     const product = productList.find((p) => p.pid === q.get("product"));
-    const period = [14, 30, 60].includes(Number(q.get("period"))) ? Number(q.get("period")) : 14;
+    const presets = [14, 30, 60];
+    const preset = presets.includes(Number(q.get("period"))) ? Number(q.get("period")) : 14;
     const requestedEnd = reportDay(q.get("to"));
     const dateTo = requestedEnd && requestedEnd <= IX.today ? requestedEnd : IX.today;
-    const wideDates = Array.from({ length: period }, (_, i) => addDays(dateTo, i - period + 1));
+    const requestedStart = reportDay(q.get("from"));
+    const custom = requestedStart && requestedStart <= dateTo;
+    const dateFrom = custom ? requestedStart : addDays(dateTo, 1 - preset);
+    const dayCount = (Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000 + 1;
+    const wideDates = Array.from({ length: dayCount }, (_, i) => addDays(dateFrom, i));
     const { dates, columns, totals } = rnpColumns(product ? [product] : products, product,
       product ? [storeOf(product.pid)] : [...visibleStores], wideDates, rnpImports());
     const ozonProducts = !product || product.mp === "ozon" ? products.filter((p) => p.mp === "ozon") : [];
@@ -1764,20 +1769,26 @@
     app.innerHTML = `
       ${demoNote()}
       <div class="head-row"><h1>РНП</h1></div>
-      <div class="rnp-filters">
+      <form class="rnp-filters" id="rnp-filter-form">
         <label class="field">Площадка или магазин<select id="rnp-scope">
           ${[["all", "Все магазины"], ...[["mp-wb", "Все магазины WB"], ["mp-ozon", "Все магазины Ozon"]].filter(([id]) => D.stores.some((s) => id === "mp-" + s.mp)),
             ...D.stores.map((s) => [s.id, s.name + " · " + mpName(s.mp)])].map(([id, label]) =>
             `<option value="${esc(id)}"${id === scope ? " selected" : ""}>${esc(label)}</option>`).join("")}
         </select></label>
-        <label class="field">Период<select id="rnp-period">${[14, 30, 60].map((n) => `<option value="${n}"${n === period ? " selected" : ""}>${n} дней</option>`).join("")}</select></label>
-        <label class="field">Последний день<input id="rnp-end" type="date" value="${dateTo}" max="${IX.today}"></label>
+        <label class="field">Начало периода<input id="rnp-start" type="date" value="${dateFrom}" max="${IX.today}" required></label>
+        <label class="field">Конец периода<input id="rnp-end" type="date" value="${dateTo}" max="${IX.today}" required></label>
+        <label class="field">Быстрый период<select id="rnp-period">
+          <option value="custom"${custom ? " selected" : ""}>Свой период</option>
+          ${presets.map((n) => `<option value="${n}"${!custom && n === preset ? " selected" : ""}>${n} дней</option>`).join("")}
+        </select></label>
+        <button type="submit" class="btn primary" aria-label="Применить период">Применить</button>
+        <p class="rnp-range-error small" id="rnp-range-error" role="alert" hidden></p>
         <label class="field rnp-article">Артикул<select id="rnp-product">
             <option value="">Все артикулы</option>
             ${productList.map((p) => `<option value="${esc(p.pid)}"${p === product ? " selected" : ""}>${esc(p.offerId || p.sku || p.pid)} · ${esc(p.name || "")} · ${esc(storeName(storeOf(p.pid)))}</option>`).join("")}
         </select></label>
         <label class="rnp-check"><input type="checkbox" id="rnp-items"${showAll ? " checked" : ""}> Показать товары без остатка</label>
-      </div>
+      </form>
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
       <p class="updated">${dmy(dates[0])} — ${dmy(dateTo)} · Даты отчётов по Москве</p>
       <div class="rnp-summary">
@@ -1793,7 +1804,7 @@
       ${pulstatSettings(ozonProducts, product)}
       ${missingPulstat.length ? `<p class="muted small">Для прогноза Ozon не хватает ${missingPulstat.join(", ")}. У одного заказа может быть несколько пропусков.</p>` : ""}
       <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
-        <table class="rnp-table" aria-label="РНП за ${period} дней">
+        <table class="rnp-table" aria-label="РНП с ${dmy(dateFrom)} по ${dmy(dateTo)}">
           <thead><tr><th scope="col">Показатель</th><th scope="col" class="rnp-total">За период</th>${dates.map((date) =>
             `<th scope="col"><time datetime="${date}">${dm(date)}.${date.slice(2, 4)}</time><span>${weekday.format(new Date(date))}</span></th>`).join("")}</tr></thead>
           ${rows.map(([label, items]) => `<tbody><tr class="rnp-section"><th scope="rowgroup">${label}</th><td class="rnp-total"></td><td colspan="${dates.length}"></td></tr>${items.map(rowHtml).join("")}</tbody>`).join("")}
@@ -1807,13 +1818,49 @@
         <p>Показатели воронки и рекламы берутся из отчётов. Уникальные посетители в сводке — сумма по товарам и дням, один человек может входить несколько раз. Переходы в карточку WB выводятся отдельно от уникальных посетителей. Время доставки WB берётся из воронки продаж, время Ozon — из доставленных отправлений с обеими датами.</p>
         <p>В каждой дате показан снимок остатков, итог берётся по последнему снимку каждого товара за период. Оценка стоимости включает товар в пути к покупателю, когда по нему есть данные. Прочерк означает, что данных для расчёта нет.${product ? " Расходы без артикула входят в сводку магазина." : ""}</p>
       </details>`;
-    for (const [control, param] of [["scope", "scope"], ["period", "period"], ["end", "to"], ["product", "product"], ["items", "items"]]) {
+    const navigate = () => { location.hash = "#/rnp" + (q.size ? "?" + q : ""); };
+    const periodForm = app.querySelector("#rnp-filter-form");
+    const start = periodForm.querySelector("#rnp-start");
+    const end = periodForm.querySelector("#rnp-end");
+    const quick = periodForm.querySelector("#rnp-period");
+    const rangeError = periodForm.querySelector("#rnp-range-error");
+    for (const field of [start, end]) {
+      field.addEventListener("input", () => {
+        quick.value = "custom";
+        rangeError.hidden = true;
+      });
+    }
+    quick.addEventListener("change", () => {
+      const length = Number(quick.value);
+      if (!presets.includes(length) || !end.reportValidity()) return;
+      start.value = addDays(end.value, 1 - length);
+      periodForm.requestSubmit();
+    });
+    periodForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (start.value > end.value) {
+        rangeError.textContent = "Начало периода должно быть раньше конца или совпадать с ним.";
+        rangeError.hidden = false;
+        start.focus();
+        return;
+      }
+      if (quick.value === "custom") {
+        q.set("from", start.value);
+        q.delete("period");
+      } else {
+        q.delete("from");
+        q.set("period", quick.value);
+      }
+      q.set("to", end.value);
+      navigate();
+    });
+    for (const [control, param] of [["scope", "scope"], ["product", "product"], ["items", "items"]]) {
       app.querySelector("#rnp-" + control).addEventListener("change", (event) => {
         const value = control === "items" ? (event.target.checked ? "all" : "") : event.target.value;
         if (value) q.set(param, value);
         else q.delete(param);
         if (control === "scope") q.delete("product");
-        location.hash = "#/rnp" + (q.size ? "?" + q : "");
+        navigate();
       });
     }
     bindPulstatSettings();

@@ -291,7 +291,9 @@ tr.r-loss td { background: color-mix(in srgb, var(--loss-soft) 45%, transparent)
 }
 .rnp-filters .field, .rnp-import .field { min-width: 0; }
 .rnp-filters :is(select, input[type="date"]), .rnp-import :is(select, input[type="file"]) { width: 100%; min-width: 0; }
-.rnp-filters input[type="date"] { min-height: 42px; border: 1px solid #c4cedb; border-radius: 9px; padding: 6px; font: inherit; background: var(--sheet); }
+.rnp-filters input[type="date"] { min-height: 48px; border: 1px solid #c4cedb; border-radius: 9px; padding: 6px; font: inherit; background: var(--sheet); }
+.rnp-filters button[type="submit"] { min-height: 42px; }
+.rnp-range-error { grid-column: 1 / -1; color: var(--loss); margin: 0; }
 .rnp-article { grid-column: 1 / -1; max-width: 560px; }
 .rnp-check { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: .85rem; }
 .rnp-import .btn-row, #rnp-import-status { grid-column: 1 / -1; margin: 0; }
@@ -326,6 +328,8 @@ tr.r-loss td { background: color-mix(in srgb, var(--loss-soft) 45%, transparent)
 .pulstat-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 8px; }
 .pulstat-settings fieldset .btn { margin-top: 8px; }
 .rnp-scroll {
+  width: fit-content;
+  max-width: 100%;
   max-height: min(70vh, 660px);
   overflow: auto;
   border: 1px solid #423851;
