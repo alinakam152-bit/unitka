@@ -1088,9 +1088,10 @@
 
   // ================= РНП =================
   function renderRnp(parts, q) {
-    const products = D.products.filter((p) => storeOk(p.pid))
+    const products = D.products.filter((p) => storeOk(p.pid));
+    const inStock = products.filter((p) => stockOf(p.pid) > 0)
       .sort((a, b) => String(a.offerId || a.sku).localeCompare(String(b.offerId || b.sku), "ru", { numeric: true }));
-    const product = products.find((p) => p.pid === q.get("product"));
+    const product = inStock.find((p) => p.pid === q.get("product"));
     const dates = Array.from({ length: 14 }, (_, i) => addDays(IX.today, i - 13));
     const byDate = new Map(dates.map((date) => [date, new Map()]));
     const totals = {};
@@ -1191,9 +1192,10 @@
       <label class="rnp-product">Артикул
         <select id="rnp-product">
           <option value="">Все артикулы</option>
-          ${products.map((p) => `<option value="${esc(p.pid)}"${p === product ? " selected" : ""}>${esc(p.offerId || p.sku || p.pid)} · ${esc(p.name || "")} · ${esc(storeName(storeOf(p.pid)))}</option>`).join("")}
+          ${inStock.map((p) => `<option value="${esc(p.pid)}"${p === product ? " selected" : ""}>${esc(p.offerId || p.sku || p.pid)} · ${esc(p.name || "")} · ${esc(storeName(storeOf(p.pid)))}</option>`).join("")}
         </select>
       </label>
+      ${inStock.length ? "" : '<p class="muted small">Нет артикулов с подтверждённым положительным остатком.</p>'}
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
       <p class="updated">${dmy(dates[0])} — ${dmy(IX.today)} · Последние дни могут быть неполными.</p>
       <p class="muted small">Цена покупателя и соинвест рассчитаны по ${int(totals.pairedQty ?? 0)} из ${int(totals.orders ?? 0)} заказанных шт. с обеими ценами. Соинвест = разница между суммами по ценам продавца и покупателя ÷ сумма по ценам продавца. Для WB цена покупателя показана без скидки за оплату WB Кошельком.</p>
