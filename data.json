@@ -1,34 +1,34 @@
 {
   "rates": {
-    "date": "2026-11-20",
+    "date": "2026-11-21",
     "source": "ЦБ РФ (cbr-xml-daily.ru)",
     "items": [
       {
         "code": "CNY",
         "name": "Юань",
-        "value": 12.2546,
-        "previous": 12.3004,
-        "change": -0.0458
+        "value": 12.2759,
+        "previous": 12.2546,
+        "change": 0.0213
       },
       {
         "code": "USD",
         "name": "Доллар",
-        "value": 81.929,
-        "previous": 82.2281,
-        "change": -0.2991
+        "value": 82.1911,
+        "previous": 81.929,
+        "change": 0.2621
       },
       {
         "code": "EUR",
         "name": "Евро",
-        "value": 89.8597,
-        "previous": 90.3605,
-        "change": -0.5008
+        "value": 90.3445,
+        "previous": 89.8597,
+        "change": 0.4848
       }
     ]
   },
   "checked": {
-    "rates": "2026-11-20T14:50+05:00",
-    "news": "2026-11-20T14:50+05:00"
+    "rates": "2026-11-21T08:43+05:00",
+    "news": "2026-11-21T08:43+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -41,19 +41,19 @@
             "title": "Селлерам Wildberries запретили поставки почти на все склады",
             "source": "Вёрстка",
             "link": "https://news.google.com/rss/articles/CBMiigFBVV95cUxQeEZTRVVOa1lpdzk1OVJ4ZFVKcjlzSmJsUGZYMEVneFVYaTdfQ001LVRZVFdLS1RiSUxkaVJET2VPSTV4R2hMRWsyb042NGw1bE9kdGtURW4xRUFxSWY5MkpDM2VRWXZ0cFJYNUtpRWNkLVJZakx5dk5NbXBhTjJ3VEszcFJuWTFNZ1E?oc=5",
-            "date": "2026-11-19T18:30+05:00"
+            "date": "2026-11-20T20:06+05:00"
           },
           {
-            "title": "Tom Tailor сократил присутствие на Wildberries – Новости ритейла и розничной торговли",
-            "source": "Retail.ru",
-            "link": "https://news.google.com/rss/articles/CBMinwFBVV95cUxOZFVWUW10TjNkNkljYVE2ZzJjRUNTeWtVUXRsejVoem84bHUzUE92U3pad2pDVXpNTHIzNnBSQ2lHY2xhOFIyc0ZlYVE3bkZkQmtSdkNQVy02eG9jeVRidE5vcmRrdHJDQm44RVB6b2thMGdaS05MYkdYbFVtWmZfMHE5U1N3czZwYW45UzYxUDVtOTNKNXJwTkcyM0ZqVU0?oc=5",
-            "date": "2026-11-18T19:04+05:00"
+            "title": "Сгорел товар на 10 млн, а выплата — 40 000 ₽: на что жалуются продавцы Wildberries",
+            "source": "Т—Ж",
+            "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE9lT3JDQjRGNjR1TFJUNWVlMFFFWEtWV3pTMGtqdkUzcFQ3U0JucDJfZjR4MURMdjVRSW1OM3RmY3dEWExuUTlDM181eHB3Q2pTeFF6ZA?oc=5",
+            "date": "2026-11-20T17:42+05:00"
           },
           {
             "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
             "source": "Sostav.ru",
             "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
-            "date": "2026-11-17T23:51+05:00"
+            "date": "2026-11-20T13:20+05:00"
           }
         ]
       },
@@ -61,6 +61,12 @@
         "mp": "ozon",
         "label": "Ozon",
         "items": [
+          {
+            "title": "Ozon продлил льготные условия для продавцов",
+            "source": "https://profashion.ru/",
+            "link": "https://news.google.com/rss/articles/CBMijAFBVV95cUxNc2tXem5abzh3VnJZYk9vSkR1RnAtSHdRVUM0ZGhQenJHam0xQzg0Z2ZNZkZpQU5FUjQ0VjN4Ny03Mllqand6OGtkWE02YnVfQzE3RmY1TzBkck82a2tfNmh6dXVCYUtuWnBoMlREc1oxQ3k4RmlIR2lKbnlhdkgyNW1rWlU0a2diaXN4MQ?oc=5",
+            "date": "2026-11-20T15:54+05:00"
+          },
           {
             "title": "Ozon продлил выгодные условия для продавцов одежды, обуви и аксессуаров до 31 января 2028 года",
             "source": "CNews.ru",
@@ -72,17 +78,11 @@
             "source": "Retail Life",
             "link": "https://news.google.com/rss/articles/CBMijwFBVV95cUxOZUhPckFGRi1PNUt4em1iV2ZHWjhETlZOYW5wV2ZqMzlfdjc2bS1nZnFTOUJtMXlzUXZFMldJVWwtcS1EcUMteG15NW91aDZXY005OHo0VUU5MmhPcjdJUDNxOTlhQjJNNkJpdk9FT1NNbzFoczU3ejUwcDZNc2VGQnFVbDBJNUw0MUQ0UmdpMA?oc=5",
             "date": "2026-11-19T19:36+05:00"
-          },
-          {
-            "title": "Ozon продлил льготные условия для продавцов fashion-категории до 2028 года",
-            "source": "rb.ru",
-            "link": "https://news.google.com/rss/articles/CBMixgFBVV95cUxOeTBySk9TczVoMDJHT0gyZXZhV3JQZDMycEhENHVfUzJENERNb3EtS1RwOEE5NjBrZ3o4VW96TmZHLVl0QnBVbWFhT2tETkpWTm8weEVZa0ZqMlJid08xMi1iemdGYUJad2x4R3hKV3NwaDk5T2dFX3pwWkRMQjlyaXQwWkotV0FEbkg5N0c0OXhHYVV0OFI4b0c0Q0NrQUFDa05OTW9kRjFRNXhzbTVnTDVKUmdJUnhYaXpvWk9iQk9XSExmSUE?oc=5",
-            "date": "2026-11-19T18:30+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-20T14:50+05:00",
+  "updated_at": "2026-11-21T08:43+05:00",
   "errors": []
 }
