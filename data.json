@@ -27,8 +27,8 @@
     ]
   },
   "checked": {
-    "rates": "2026-11-21T14:39+05:00",
-    "news": "2026-11-21T14:39+05:00"
+    "rates": "2026-11-22T08:44+05:00",
+    "news": "2026-11-22T08:44+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -38,22 +38,22 @@
         "label": "Wildberries",
         "items": [
           {
+            "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
+            "source": "Sostav.ru",
+            "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
+            "date": "2026-11-21T15:43+05:00"
+          },
+          {
             "title": "Селлерам Wildberries запретили поставки почти на все склады",
             "source": "Вёрстка",
             "link": "https://news.google.com/rss/articles/CBMiigFBVV95cUxQeEZTRVVOa1lpdzk1OVJ4ZFVKcjlzSmJsUGZYMEVneFVYaTdfQ001LVRZVFdLS1RiSUxkaVJET2VPSTV4R2hMRWsyb042NGw1bE9kdGtURW4xRUFxSWY5MkpDM2VRWXZ0cFJYNUtpRWNkLVJZakx5dk5NbXBhTjJ3VEszcFJuWTFNZ1E?oc=5",
             "date": "2026-11-20T20:06+05:00"
           },
           {
-            "title": "Сгорел товар на 10 млн, а выплата — 40 000 ₽: на что жалуются продавцы Wildberries",
-            "source": "Т—Ж",
-            "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE9lT3JDQjRGNjR1TFJUNWVlMFFFWEtWV3pTMGtqdkUzcFQ3U0JucDJfZjR4MURMdjVRSW1OM3RmY3dEWExuUTlDM181eHB3Q2pTeFF6ZA?oc=5",
-            "date": "2026-11-20T17:42+05:00"
-          },
-          {
-            "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
-            "source": "Sostav.ru",
-            "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
-            "date": "2026-11-20T13:20+05:00"
+            "title": "Сгорел товар на 10 млн, выплата 40 000 ₽: продавцы Wildberries недовольны",
+            "source": "https://incidentia.ru/",
+            "link": "https://news.google.com/rss/articles/CBMid0FVX3lxTFBlRXZ3ZWE0TEhhQmEwUHQ1ZkxNRHpTdjBxSDIxYi1lLU43bnpuOEJDQW1pWmVNOWVNQmlwTUZLc1BIY0NWWWVsYWY2QkR2Um4tU2NuYkxLTkxvbDRoRTZDNkhRT0h4ZVZQN2l0RkJ2QlYtcUNaTVpz?oc=5",
+            "date": "2026-11-20T18:10+05:00"
           }
         ]
       },
@@ -83,6 +83,6 @@
       }
     ]
   },
-  "updated_at": "2026-11-21T14:39+05:00",
+  "updated_at": "2026-11-22T08:44+05:00",
   "errors": []
 }
