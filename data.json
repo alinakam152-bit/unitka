@@ -27,8 +27,8 @@
     ]
   },
   "checked": {
-    "rates": "2026-11-23T08:52+05:00",
-    "news": "2026-11-23T08:52+05:00"
+    "rates": "2026-11-23T15:03+05:00",
+    "news": "2026-11-23T15:03+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -38,22 +38,22 @@
         "label": "Wildberries",
         "items": [
           {
+            "title": "Безотзывное поручение в оферте Wildberries: выручка продавца в счёт долгов перед банком и факторингом группы",
+            "source": "zakon.ru",
+            "link": "https://news.google.com/rss/articles/CBMizgFBVV95cUxOV3Z6VWNoQnVpSWhNUGh6dlZOeHN0eERGQmkxcjQzekNFOTRrMXlrdlh5dFotei1rVmlRRy1zNTBjZ3RYOTgxMTlzc2xiOGYzZVFPcVowVnBsN29NYm44NjNnSW9oZGpMQURiRTdxa3hQQ0tKQVdYVVdxN0xudVg3XzZldk5Cbm1qak5zaVM4TEVHNktFSkJmdjdEX3lwdG9pc3JIVXJ1aWxrMm9lSnVFYkVhempxbGZhQjhpM3BTM3diWm1lVHZUemV2ODQ1QQ?oc=5",
+            "date": "2026-11-23T14:21+05:00"
+          },
+          {
             "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
             "source": "Sostav.ru",
             "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
-            "date": "2026-11-21T20:25+05:00"
+            "date": "2026-11-23T14:01+05:00"
           },
           {
-            "title": "Селлерам Wildberries запретили поставки почти на все склады",
-            "source": "Вёрстка",
-            "link": "https://news.google.com/rss/articles/CBMiigFBVV95cUxQeEZTRVVOa1lpdzk1OVJ4ZFVKcjlzSmJsUGZYMEVneFVYaTdfQ001LVRZVFdLS1RiSUxkaVJET2VPSTV4R2hMRWsyb042NGw1bE9kdGtURW4xRUFxSWY5MkpDM2VRWXZ0cFJYNUtpRWNkLVJZakx5dk5NbXBhTjJ3VEszcFJuWTFNZ1E?oc=5",
-            "date": "2026-11-20T20:06+05:00"
-          },
-          {
-            "title": "Сгорел товар на 10 млн, а выплата — 40 000 ₽: на что жалуются продавцы Wildberries",
-            "source": "Т—Ж",
-            "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE9lT3JDQjRGNjR1TFJUNWVlMFFFWEtWV3pTMGtqdkUzcFQ3U0JucDJfZjR4MURMdjVRSW1OM3RmY3dEWExuUTlDM181eHB3Q2pTeFF6ZA?oc=5",
-            "date": "2026-11-20T17:42+05:00"
+            "title": "Wildberries: продавец заплатит 44 рубля за утилизацию возврата в 14 регионах",
+            "source": "Techora.ru",
+            "link": "https://news.google.com/rss/articles/CBMihAFBVV95cUxNTE5ZTVJjYW5Wc1FoQUNyUWxsSXZOSHY4cE1GeVdfdEhVR0pWNERYNXJBWHZvTzdaMlh0RmU4cTVwcHcxUDdXMXBvcjJXdUtTWWNwU2pEbE50OWRBMnQ0Z0RWZDBNNV9vSE1veXhLOXFObHdCQkt1Sk40Uk13d3V4WGtUNzM?oc=5",
+            "date": "2026-11-23T11:18+05:00"
           }
         ]
       },
@@ -61,6 +61,12 @@
         "mp": "ozon",
         "label": "Ozon",
         "items": [
+          {
+            "title": "Товар продавца на складе Ozon: ответственность комиссионера, договорный лимит возмещения и согласование молчанием",
+            "source": "zakon.ru",
+            "link": "https://news.google.com/rss/articles/CBMizgFBVV95cUxOOVctQTllUDNiY0Y2bkJQOVFBR1JOaG1sX1BuVHNtelVSdC1XR2w5RU93QkdXWFBNdEdGZjFGcFN3ekx5RXlDcmZtME83VjNoWEFER2I1dEZucEl1SHR2dXlvcjhWM2tjZTJrNFh5VEhSTGR2dmtNWG42VXNmM0VieTNhTWVmSEZDMy1WTnJudGRIdmZIaUx5ekNtWkdLNU9SaS1XZjZCN2N2emVNMW8zSXo2dWg0X284czVmVXl0aG1nbWM3NUJzLWxxRDY1Zw?oc=5",
+            "date": "2026-11-23T10:59+05:00"
+          },
           {
             "title": "Ozon продлил льготные условия для продавцов",
             "source": "https://profashion.ru/",
@@ -72,17 +78,11 @@
             "source": "CNews.ru",
             "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTFBPa1VoOU92TlBDR0FqcC1KNmJhdWZBakJlNUh0UGhVbUo2bjlYVWQzQU5NVlU1QTVyMzdCel85NnJ3TVdzWWdqanJwd0lIak56MmtvTk1Hd3Fuc0F6R3pjSlJHMTY1VVQtRDRrc3JHVExwNGFWYmdzdl9xSFU?oc=5",
             "date": "2026-11-20T08:56+05:00"
-          },
-          {
-            "title": "Льготы для fashion‑продавцов на Ozon сохранятся до 2028 года",
-            "source": "Retail Life",
-            "link": "https://news.google.com/rss/articles/CBMijwFBVV95cUxOZUhPckFGRi1PNUt4em1iV2ZHWjhETlZOYW5wV2ZqMzlfdjc2bS1nZnFTOUJtMXlzUXZFMldJVWwtcS1EcUMteG15NW91aDZXY005OHo0VUU5MmhPcjdJUDNxOTlhQjJNNkJpdk9FT1NNbzFoczU3ejUwcDZNc2VGQnFVbDBJNUw0MUQ0UmdpMA?oc=5",
-            "date": "2026-11-19T19:36+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-23T08:52+05:00",
+  "updated_at": "2026-11-23T15:03+05:00",
   "errors": []
 }
