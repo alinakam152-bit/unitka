@@ -1,34 +1,34 @@
 {
   "rates": {
-    "date": "2026-11-24",
+    "date": "2026-11-25",
     "source": "ЦБ РФ (cbr-xml-daily.ru)",
     "items": [
       {
         "code": "CNY",
         "name": "Юань",
-        "value": 12.2615,
-        "previous": 12.2759,
-        "change": -0.0144
+        "value": 12.2767,
+        "previous": 12.2615,
+        "change": 0.0152
       },
       {
         "code": "USD",
         "name": "Доллар",
-        "value": 82.1488,
-        "previous": 82.1911,
-        "change": -0.0423
+        "value": 82.1664,
+        "previous": 82.1488,
+        "change": 0.0176
       },
       {
         "code": "EUR",
         "name": "Евро",
-        "value": 90.2815,
-        "previous": 90.3445,
-        "change": -0.063
+        "value": 89.8818,
+        "previous": 90.2815,
+        "change": -0.3997
       }
     ]
   },
   "checked": {
-    "rates": "2026-11-24T14:57+05:00",
-    "news": "2026-11-24T14:57+05:00"
+    "rates": "2026-11-25T08:52+05:00",
+    "news": "2026-11-25T08:52+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -38,22 +38,22 @@
         "label": "Wildberries",
         "items": [
           {
-            "title": "За год цены на товары на Wildberries и Ozon выросли на 11% – Новости ритейла и розничной торговли",
-            "source": "Retail.ru",
-            "link": "https://news.google.com/rss/articles/CBMisAFBVV95cUxQOTlwR1pRZ2dZTGFTOVl6enpibjNkRk9FMk1PWVRuN2Etbjg5VUJKTmp3NWZTMFA4aUJ6MW9YVVN3RHB5Z09YeEh1ZFd0a2cwOGFNSmVibGR0T0pBRjlKVHpVMXNCX1VxS1RLeGEyc2tBMWpnYUxfVGp0MEVZbkIyMW1uRDFCNXJ0bkdVbW8wNENjUklsZm0zdW1qY1JybjMxdmxXczNiR19SRzZYcHFLZQ?oc=5",
-            "date": "2026-11-24T09:23+05:00"
+            "title": "Wildberries запустила бонусную программу для продавцов",
+            "source": "E-pepper",
+            "link": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQd1JUVkZUc1FDVE9OZzZ2RXZ1QmRTUmwtZDNQN0I3blJWR0Z2aVk2VE14YVdOYUYzY3hoRmdvQU1KZjFlQ0M0WkEtblZ6SnV4a2llTF94QVZvNDZkNUJKWVVJaFhVOWtHZjNvRlpnWHBEd1NpaWhiY3RSdVZzcXYzcm9BaDNseUlWUU40cVlEUDlqUQ?oc=5",
+            "date": "2026-11-25T03:02+05:00"
           },
           {
-            "title": "Фиолетовая корона: экосистема и банк Вайлдберриз",
-            "source": "Банки.ру",
-            "link": "https://news.google.com/rss/articles/CBMiVkFVX3lxTFBFamJoRVE2UEVRNDNManlGcEwwZUpGd0dxN1hzamJkdkVmdnZxOS1nbmk1UVhlQ2pGZTdDelluTVZfS0VMVFdiY2NmU285NmlhSmg3NUNB?oc=5",
-            "date": "2026-11-23T15:53+05:00"
+            "title": "Селлеры Wildberries не могут вывести деньги с продаж и получить компенсации за сгоревшие товары на складах",
+            "source": "«Бумага»",
+            "link": "https://news.google.com/rss/articles/CBMilgFBVV95cUxORHhIQjNNRmpZTlhQTVNoS2tfRC10VWJYUFgtRkxOaThXYVFHcF9GcllVZzlHcm1HNVhORVE4RGlhZ2V6TERzLXlpd2NvRlkyY3BhTTRmOTNzN3RBa2F6WGZleDMwN1V5ODBqeTVWNm1udWRkUHVxaDlCQ0ZSVFhIZXItRmpJcDRnV2dHd3U4dmhWNWpTT0HSAZsBQVVfeXFMUFVfS3lBQnJMSkltUkVQLTlqUGdhLUI1NnY0cVRyUUp6VE9rYjhyU0JxMGFvUGEyRUx6TlN3Sm9jWGJmWF9vSC1WYlNUOXpuWnVERWVtQkNGTDd5Y0t1c19MdVVQeXlRUVp5amVfQmhGS3hScjA4UXk1QzhuME1QUWRrcGx4RHQ4OEhoMkRYNkZaeU5BY2N2bjdOb3c?oc=5",
+            "date": "2026-11-24T21:30+05:00"
           },
           {
-            "title": "Wildberries: продавец заплатит 44 рубля за утилизацию возврата в 14 регионах",
-            "source": "Techora.ru",
-            "link": "https://news.google.com/rss/articles/CBMihAFBVV95cUxNTE5ZTVJjYW5Wc1FoQUNyUWxsSXZOSHY4cE1GeVdfdEhVR0pWNERYNXJBWHZvTzdaMlh0RmU4cTVwcHcxUDdXMXBvcjJXdUtTWWNwU2pEbE50OWRBMnQ0Z0RWZDBNNV9vSE1veXhLOXFObHdCQkt1Sk40Uk13d3V4WGtUNzM?oc=5",
-            "date": "2026-11-23T11:18+05:00"
+            "title": "Wildberries запустил бонусную программу «Морс» для селлеров",
+            "source": "Т-Бизнес секреты",
+            "link": "https://news.google.com/rss/articles/CBMibEFVX3lxTE95eG02LS16SWxHSGdUcXdzQ1ZDRktLUnZPbkt1aE94bk16cmNGS1lIOWx2U1JnTjd6UGNNTEJIODRBQm5VRE9jT2luMTF1VzM3VEkydEs3MGlXNmtFRUZCTkJvVm9yUUZTSUdHMg?oc=5",
+            "date": "2026-11-24T15:08+05:00"
           }
         ]
       },
@@ -62,27 +62,27 @@
         "label": "Ozon",
         "items": [
           {
+            "title": "Пострадавшие товары на складах Ozon: какие документы получит продавец и как оформить страховую выплату",
+            "source": "Финансы Mail",
+            "link": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPR2c5TzFrYnNHclZpb0pneWNJT2wwUjhTRkhJaDliaDU0QmItdWtmd2JRSVhTRjdZZ3Q1Ynd1QmIxX2M5cEU5cGhwdUR0dDJiYm1ha3dLNkVvS2Z3eG40dFVGV2Z0Yl9mRFNZUTM2MFhMMHRRV3QzNHdqMFBqS2hDVVpyXzJzQW90UEdJaFNNSWJtZEl1N3VKdmlIdmZzVUhwcnRqM0R4RFBxNEZiSWxneWpsUEc?oc=5",
+            "date": "2026-11-24T18:15+05:00"
+          },
+          {
+            "title": "За год цены на товары на Wildberries и Ozon выросли на 11% – Новости ритейла и розничной торговли",
+            "source": "Retail.ru",
+            "link": "https://news.google.com/rss/articles/CBMisAFBVV95cUxQOTlwR1pRZ2dZTGFTOVl6enpibjNkRk9FMk1PWVRuN2Etbjg5VUJKTmp3NWZTMFA4aUJ6MW9YVVN3RHB5Z09YeEh1ZFd0a2cwOGFNSmVibGR0T0pBRjlKVHpVMXNCX1VxS1RLeGEyc2tBMWpnYUxfVGp0MEVZbkIyMW1uRDFCNXJ0bkdVbW8wNENjUklsZm0zdW1qY1JybjMxdmxXczNiR19SRzZYcHFLZQ?oc=5",
+            "date": "2026-11-24T09:23+05:00"
+          },
+          {
             "title": "Продавцы Ozon больше не смогут задавать скидки в рублях",
             "source": "E-pepper",
             "link": "https://news.google.com/rss/articles/CBMikAFBVV95cUxQSXlrYmIybVBFMTZSQndUSXdRTHQtT2lRYzV5WHpTMnZqX1FXNks5NURrQ3k3NHR6cU1kWTN3NVpfUFB1ckRJT1FoUzNRMXNWc1lYVHhVS0ZYYlZJaFV6djVBcHdIQXVqRW1na241SDdCSWhvMXlPUWZveTZRNHZkQVBlR0RYVUdNYUxkdkFJTUo?oc=5",
             "date": "2026-11-24T04:18+05:00"
-          },
-          {
-            "title": "Товар продавца на складе Ozon: ответственность комиссионера, договорный лимит возмещения и согласование молчанием",
-            "source": "zakon.ru",
-            "link": "https://news.google.com/rss/articles/CBMiygFBVV95cUxQaUxVWVVydktIek1sNmlpcF9MZkFlanJNSkFnRjVtR0NwYVdrVUJGQjhGRGVhZFlSRzJQUjAyUlJ6V2ZDcGdodFFDRU1JNzRDODlUMjMzaV82Mi16djU2dGJVN000RU94NkJZUEg0WktFaTNjcTc5eHBPNmFFUUVkekZ1a2FwVUxxZWdKMlBYRWVFa1h4bkE5Qy1YZDA5S3ZsOG84VHprbVhvQTJmcmwtcnkzN21uM042Y243d0wtdFp3Rno3aVhfSmtB?oc=5",
-            "date": "2026-11-23T10:59+05:00"
-          },
-          {
-            "title": "Ozon продлил льготные условия для продавцов",
-            "source": "https://profashion.ru/",
-            "link": "https://news.google.com/rss/articles/CBMijAFBVV95cUxNc2tXem5abzh3VnJZYk9vSkR1RnAtSHdRVUM0ZGhQenJHam0xQzg0Z2ZNZkZpQU5FUjQ0VjN4Ny03Mllqand6OGtkWE02YnVfQzE3RmY1TzBkck82a2tfNmh6dXVCYUtuWnBoMlREc1oxQ3k4RmlIR2lKbnlhdkgyNW1rWlU0a2diaXN4MQ?oc=5",
-            "date": "2026-11-20T15:54+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-24T14:57+05:00",
+  "updated_at": "2026-11-25T08:52+05:00",
   "errors": []
 }
