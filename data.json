@@ -1,34 +1,34 @@
 {
   "rates": {
-    "date": "2026-11-25",
+    "date": "2026-11-26",
     "source": "ЦБ РФ (cbr-xml-daily.ru)",
     "items": [
       {
         "code": "CNY",
         "name": "Юань",
-        "value": 12.2767,
-        "previous": 12.2615,
-        "change": 0.0152
+        "value": 12.3154,
+        "previous": 12.2767,
+        "change": 0.0387
       },
       {
         "code": "USD",
         "name": "Доллар",
-        "value": 82.1664,
-        "previous": 82.1488,
-        "change": 0.0176
+        "value": 82.313,
+        "previous": 82.1664,
+        "change": 0.1466
       },
       {
         "code": "EUR",
         "name": "Евро",
-        "value": 89.8818,
-        "previous": 90.2815,
-        "change": -0.3997
+        "value": 90.2397,
+        "previous": 89.8818,
+        "change": 0.3579
       }
     ]
   },
   "checked": {
-    "rates": "2026-11-25T14:59+05:00",
-    "news": "2026-11-25T14:59+05:00"
+    "rates": "2026-11-26T08:49+05:00",
+    "news": "2026-11-26T08:49+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -38,22 +38,22 @@
         "label": "Wildberries",
         "items": [
           {
-            "title": "Селлеры Wildberries не могут вывести деньги с продаж и получить компенсации за сгоревшие товары на складах",
-            "source": "«Бумага»",
-            "link": "https://news.google.com/rss/articles/CBMilgFBVV95cUxORHhIQjNNRmpZTlhQTVNoS2tfRC10VWJYUFgtRkxOaThXYVFHcF9GcllVZzlHcm1HNVhORVE4RGlhZ2V6TERzLXlpd2NvRlkyY3BhTTRmOTNzN3RBa2F6WGZleDMwN1V5ODBqeTVWNm1udWRkUHVxaDlCQ0ZSVFhIZXItRmpJcDRnV2dHd3U4dmhWNWpTT0HSAZsBQVVfeXFMUFVfS3lBQnJMSkltUkVQLTlqUGdhLUI1NnY0cVRyUUp6VE9rYjhyU0JxMGFvUGEyRUx6TlN3Sm9jWGJmWF9vSC1WYlNUOXpuWnVERWVtQkNGTDd5Y0t1c19MdVVQeXlRUVp5amVfQmhGS3hScjA4UXk1QzhuME1QUWRrcGx4RHQ4OEhoMkRYNkZaeU5BY2N2bjdOb3c?oc=5",
-            "date": "2026-11-24T21:30+05:00"
+            "title": "\"Wildberries просто бросил\": в России продавцы массово жалуются на невыплату компенсаций",
+            "source": "Економічна правда",
+            "link": "https://news.google.com/rss/articles/CBMiugFBVV95cUxQZ3dRTWNZT2ZUMFZpNTZ2cDRPcjlrXzJWNGM1RXZ3TGNPVFJDNWFGRUtPY3VXTU5NUTlaNUFDWjNxTnJYSHZRQWVEejRTT3JXV0VWRkM3bzhmWmRLWTZ2SHB6ZVliNnp2SzFWVWJTY1RoMmxHenNCWnZfbGVDTjduOE12XzQydFZIVlZBeFFtbXpiZ1lHR1RpS0RhZTFYZDVSdmRzWFdLY3YzYlZXRHRjSGJzQkl6S2p4RlHSAcYBQVVfeXFMTnpCUkhBcHRGUWpxQ25qSXo0dWdkcDlpWVlIVW00Zkpuckh6ZDBFOFdrMHlENldCUjQ2bnEzeDM0MjhqclZqZXk3eTRHNjlYcmRxVERyUEhRNWNPT0ptZDFmSWhmSUdkcGg1LXNHX09oUkJrUGVTVXZYSUViWE9qSFNRaWdMQ0VTOGh1NG1oMVE0OXVHZE1xUkVGMG1zMHJMUmtTUGFCalUzTVI5THk3VTY0QUN6NmNycnpGd3dMTEJaR0Y4SFpB?oc=5",
+            "date": "2026-11-25T16:35+05:00"
           },
           {
-            "title": "Wildberries запустил бонусную программу «Морс» для селлеров",
-            "source": "Т-Бизнес секреты",
-            "link": "https://news.google.com/rss/articles/CBMibEFVX3lxTE95eG02LS16SWxHSGdUcXdzQ1ZDRktLUnZPbkt1aE94bk16cmNGS1lIOWx2U1JnTjd6UGNNTEJIODRBQm5VRE9jT2luMTF1VzM3VEkydEs3MGlXNmtFRUZCTkJvVm9yUUZTSUdHMg?oc=5",
-            "date": "2026-11-24T15:08+05:00"
+            "title": "Wildberries запустил бонусную программу для продавцов",
+            "source": "E-pepper",
+            "link": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQd1JUVkZUc1FDVE9OZzZ2RXZ1QmRTUmwtZDNQN0I3blJWR0Z2aVk2VE14YVdOYUYzY3hoRmdvQU1KZjFlQ0M0WkEtblZ6SnV4a2llTF94QVZvNDZkNUJKWVVJaFhVOWtHZjNvRlpnWHBEd1NpaWhiY3RSdVZzcXYzcm9BaDNseUlWUU40cVlEUDlqUQ?oc=5",
+            "date": "2026-11-25T03:02+05:00"
           },
           {
-            "title": "Wildberries угостит продавцов «Морсом»",
-            "source": "Sostav.ru",
-            "link": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxNMkZiTzUxcHBnZ0ZOWjN1VjZyQmE1c01jb1AtTmp5LVJyQkFjS285Qlp1Y2VJVkhkMGZsYm1OZERTQUJTS3VGanJlS2NuYTRmeXFzTWpzakpUQmZVRzh5Mno1UWxmbWt1T2tseG9EclB2S2MxSHNoTWtqX0k5YWh6Q2tldHhJMlBTZ3pfb0poX3oxMnhjdGN5UWIxWXRYRFZRMloyc3IyQk1IR0E?oc=5",
-            "date": "2026-11-24T15:05+05:00"
+            "title": "Фиолетовая корона: экосистема и банк Вайлдберриз",
+            "source": "Банки.ру",
+            "link": "https://news.google.com/rss/articles/CBMiVkFVX3lxTFBFamJoRVE2UEVRNDNManlGcEwwZUpGd0dxN1hzamJkdkVmdnZxOS1nbmk1UVhlQ2pGZTdDelluTVZfS0VMVFdiY2NmU285NmlhSmg3NUNB?oc=5",
+            "date": "2026-11-25T00:55+05:00"
           }
         ]
       },
@@ -62,27 +62,27 @@
         "label": "Ozon",
         "items": [
           {
+            "title": "20 рекламных постов и охота за скидками: рабочий день контент-менеджера проекта с товарами Ozon из Екатеринбурга",
+            "source": "Т—Ж",
+            "link": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxNQnVPRjNEUWxDRzFQc3RkLXFPSVJ4bzd0RDNfYnJ6SFZGNVo3Y3M3V05kMjJQSUQ3Ny12b0FyX3lSQTE3ZGdTR1NWbGhqWjJYQWZQWjZSaER2ZDlFLVRxM1htZHZvY0dEbTNHNTZya3V2dVJOUU9SOVZzSHFib1NLMjBLYlhMZmxhT1R3?oc=5",
+            "date": "2026-11-25T15:38+05:00"
+          },
+          {
             "title": "Пострадавшие товары на складах Ozon: какие документы получит продавец и как оформить страховую выплату",
             "source": "Финансы Mail",
             "link": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPR2c5TzFrYnNHclZpb0pneWNJT2wwUjhTRkhJaDliaDU0QmItdWtmd2JRSVhTRjdZZ3Q1Ynd1QmIxX2M5cEU5cGhwdUR0dDJiYm1ha3dLNkVvS2Z3eG40dFVGV2Z0Yl9mRFNZUTM2MFhMMHRRV3QzNHdqMFBqS2hDVVpyXzJzQW90UEdJaFNNSWJtZEl1N3VKdmlIdmZzVUhwcnRqM0R4RFBxNEZiSWxneWpsUEc?oc=5",
             "date": "2026-11-24T18:15+05:00"
           },
           {
-            "title": "Рост цен на Ozon и Wildberries в третьем квартале ускорился до 11,2%",
-            "source": "New Retail",
-            "link": "https://news.google.com/rss/articles/CBMiqgFBVV95cUxOY3NRRUNSZmM0RWJCdE9TMGFncGtQdGJXRVJpUmhZTVNaMlhrNVl1cXFxUG9SVW53Y2ZPSjhiVm1oWXBmWERaMUdzVXB3eUd6Y0tGcGdnZ1hjZlRLWkZyeGNHeXBRUUxfbDRYb2FlYTEwOUxDWGppT3JqLXIzTFc4dlpvVnlvcUUxUTBLeFRlcFV1Ykw4eXA4WFRwOUFJQmxYbFl1bjhsOFZxZw?oc=5",
-            "date": "2026-11-24T02:00+05:00"
-          },
-          {
-            "title": "Ozon продлил льготные условия для fashion-продавцов до 2028 года",
+            "title": "Продавцы Ozon больше не смогут задавать скидки в рублях",
             "source": "E-pepper",
-            "link": "https://news.google.com/rss/articles/CBMingFBVV95cUxPNXMtNk5hTnQ0Q2ZDaUJ3SUhrNER3c1pndDV0QnBZeUJwZmZfOGdER1Axcll1RmEyM3V3U0RSbkQzZVVJUW4yM2w2QWNDenYwSGVsa2RhTklSNm1yYTBRM19wOXRHT2ozZExCVVRCaHRTNzNxb2ZJSmtMVVZxMmhfc1BtVG1HR0RuZGdiRnJOU1dsbURKRERlOTllendOZw?oc=5",
-            "date": "2026-11-23T14:54+05:00"
+            "link": "https://news.google.com/rss/articles/CBMikAFBVV95cUxQSXlrYmIybVBFMTZSQndUSXdRTHQtT2lRYzV5WHpTMnZqX1FXNks5NURrQ3k3NHR6cU1kWTN3NVpfUFB1ckRJT1FoUzNRMXNWc1lYVHhVS0ZYYlZJaFV6djVBcHdIQXVqRW1na241SDdCSWhvMXlPUWZveTZRNHZkQVBlR0RYVUdNYUxkdkFJTUo?oc=5",
+            "date": "2026-11-24T04:18+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-25T14:59+05:00",
+  "updated_at": "2026-11-26T08:49+05:00",
   "errors": []
 }
