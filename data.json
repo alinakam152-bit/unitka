@@ -27,8 +27,8 @@
     ]
   },
   "checked": {
-    "rates": "2026-11-27T08:50+05:00",
-    "news": "2026-11-27T08:50+05:00"
+    "rates": "2026-11-27T14:56+05:00",
+    "news": "2026-11-27T14:56+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -37,6 +37,12 @@
         "mp": "wb",
         "label": "Wildberries",
         "items": [
+          {
+            "title": "Российский Wildberries \"кинул\" продавцов на деньги: что известно о скандальных случаях",
+            "source": "24 Канал",
+            "link": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPWS12WUVhanpxcUEtM3pzLS1VQ3l4TW9McWZrUlNXMjdPdWdlcHd6Y2dONlJCMjFXdU1pZmlDc1Qzc1dkWGhERlV6VWtWaGJIekdOVjBIT25LeDFfMUZ6ZTN2QkVMTmt0ZmRWSHBWcmxQeWU5MWh5ckJ5ZFJHaXpEaTdaY3pYUlJvMnN4TTZzaEZFR05tbEpXNEhESm14QlBmSkHSAacBQVVfeXFMTUFDb0JJWm96Zno4cEhKaEt4XzdEc1EzUHRPRU5aSkJpN3hOeXlRZl8zcFEycFJsUVN5Y3FkOFVaOXFxNUFQZTJ4VnRmTUdfbG1hakJzdklHYUMyQ2xlVl9PME9IeEM5eG9oT1ZVLWJ5cHlKSENqY1hPSHNsY2thdUNzemFoOEVsd1RxUDczbDNQVUNONDhXemdMQ3dUdlZNRWZRWG9OWXc?oc=5",
+            "date": "2026-11-25T19:13+05:00"
+          },
           {
             "title": "\"Wildberries просто бросил\": в России продавцы массово жалуются на невыплату компенсаций",
             "source": "Економічна правда",
@@ -48,12 +54,6 @@
             "source": "Русская служба The Moscow Times",
             "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQdHpDSk9WbUtERG5Qa2gyV0JYa1RSM3lzaEpzMVIyU0d2RHY5Z191Zl9VMlQ5Nm10QTYwUFlPdWlBOVRJS3JNM0wweFNjck82OXBTUF9GUWJoODFsdXFKTHVWcHNzeGZjZ1Zhd25aNEZ6RzhaWE5JQVV1cF9PVU1VMGIzOVRIRVlIZ1NUY2NzSXd5YTZ3NTRFNnZGVlY4bU9OMnNDaF9hT3FRaFNSZGZUdWZZbUJja1JqLXVHMTBR?oc=5",
             "date": "2026-11-25T16:03+05:00"
-          },
-          {
-            "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
-            "source": "Sostav.ru",
-            "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
-            "date": "2026-11-25T09:45+05:00"
           }
         ]
       },
@@ -62,27 +62,27 @@
         "label": "Ozon",
         "items": [
           {
+            "title": "Ozon начал выдавать селлерам справки о пострадавших после атак товарах",
+            "source": "Т-Бизнес секреты",
+            "link": "https://news.google.com/rss/articles/CBMieEFVX3lxTE1GS3Q4X1dWS3JYWWM0MkZOcnlOZmtMVmJtWVJxVUZGMXE5TTBqUGVHNDgyT1FRNEhwSnE4dnU5bEc4cEkzcjdweGpGbVVBNnNYZHMzSHNRZTlGN2dFa1VqVnlNZ0hsNTBCdlpIYktOdVJ4VlB4aDFnRA?oc=5",
+            "date": "2026-11-26T12:29+05:00"
+          },
+          {
             "title": "Ozon начал выдавать справки селлерам, пострадавшим от атак беспилотников",
             "source": "Frank Media",
             "link": "https://news.google.com/rss/articles/CBMiQkFVX3lxTFBGcjBjVFI4S2M1ckNhNHpocUs3MVEwQWw4UzZaYnVfRDhDb0xmTUx0LWdQQkZPQUtvcG4xX0Jfam1Wdw?oc=5",
             "date": "2026-11-25T20:33+05:00"
           },
           {
-            "title": "Ozon поможет продавцам оформить учёт потерь после пожаров на складах",
-            "source": "rb.ru",
-            "link": "https://news.google.com/rss/articles/CBMizAFBVV95cUxQVFk3QUZod0xjUVdERm9TaVd3VERNSFZPdFN1Yi1BQklsVnktd2U1N0lGcHM2RWZqQVVNc2pmUVNUR3lPeFp3cGM5R1E1RVhRWllXTjE1WUQ3eTZNYVRjTUZBUEdKemc5UmZQUnczb1oweVFqRkd2V1FBZ2RQMHpCZ0tfblpJMXkwWjFKQjVIbHBGd3YwOWp3R1RNSHZqSXNiUVRkNGFQc29tNjNlNnBMMTBmaHJpRVo4ZjZ6QmxXbndLeGxMdExmRTJjYkc?oc=5",
-            "date": "2026-11-24T21:00+05:00"
-          },
-          {
-            "title": "Пострадавшие товары на складах Ozon: какие документы получит продавец и как оформить страховую выплату",
-            "source": "Финансы Mail",
-            "link": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPR2c5TzFrYnNHclZpb0pneWNJT2wwUjhTRkhJaDliaDU0QmItdWtmd2JRSVhTRjdZZ3Q1Ynd1QmIxX2M5cEU5cGhwdUR0dDJiYm1ha3dLNkVvS2Z3eG40dFVGV2Z0Yl9mRFNZUTM2MFhMMHRRV3QzNHdqMFBqS2hDVVpyXzJzQW90UEdJaFNNSWJtZEl1N3VKdmlIdmZzVUhwcnRqM0R4RFBxNEZiSWxneWpsUEc?oc=5",
-            "date": "2026-11-24T18:15+05:00"
+            "title": "20 рекламных постов и охота за скидками: рабочий день контент-менеджера проекта с товарами Ozon из Екатеринбурга",
+            "source": "Т—Ж",
+            "link": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxNQnVPRjNEUWxDRzFQc3RkLXFPSVJ4bzd0RDNfYnJ6SFZGNVo3Y3M3V05kMjJQSUQ3Ny12b0FyX3lSQTE3ZGdTR1NWbGhqWjJYQWZQWjZSaER2ZDlFLVRxM1htZHZvY0dEbTNHNTZya3V2dVJOUU9SOVZzSHFib1NLMjBLYlhMZmxhT1R3?oc=5",
+            "date": "2026-11-25T15:38+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-27T08:50+05:00",
+  "updated_at": "2026-11-27T14:56+05:00",
   "errors": []
 }
