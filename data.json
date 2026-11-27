@@ -1,34 +1,34 @@
 {
   "rates": {
-    "date": "2026-11-26",
+    "date": "2026-11-27",
     "source": "ЦБ РФ (cbr-xml-daily.ru)",
     "items": [
       {
         "code": "CNY",
         "name": "Юань",
-        "value": 12.3154,
-        "previous": 12.2767,
-        "change": 0.0387
+        "value": 12.3184,
+        "previous": 12.3154,
+        "change": 0.003
       },
       {
         "code": "USD",
         "name": "Доллар",
-        "value": 82.313,
-        "previous": 82.1664,
-        "change": 0.1466
+        "value": 82.1265,
+        "previous": 82.313,
+        "change": -0.1865
       },
       {
         "code": "EUR",
         "name": "Евро",
-        "value": 90.2397,
-        "previous": 89.8818,
-        "change": 0.3579
+        "value": 89.8053,
+        "previous": 90.2397,
+        "change": -0.4344
       }
     ]
   },
   "checked": {
-    "rates": "2026-11-26T14:57+05:00",
-    "news": "2026-11-26T14:58+05:00"
+    "rates": "2026-11-27T08:50+05:00",
+    "news": "2026-11-27T08:50+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -44,16 +44,16 @@
             "date": "2026-11-25T16:35+05:00"
           },
           {
+            "title": "«WB нас просто кинул». Селлеры массово жалуются на невыплату Wildberries компенсаций за сгоревшие товары",
+            "source": "Русская служба The Moscow Times",
+            "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQdHpDSk9WbUtERG5Qa2gyV0JYa1RSM3lzaEpzMVIyU0d2RHY5Z191Zl9VMlQ5Nm10QTYwUFlPdWlBOVRJS3JNM0wweFNjck82OXBTUF9GUWJoODFsdXFKTHVWcHNzeGZjZ1Zhd25aNEZ6RzhaWE5JQVV1cF9PVU1VMGIzOVRIRVlIZ1NUY2NzSXd5YTZ3NTRFNnZGVlY4bU9OMnNDaF9hT3FRaFNSZGZUdWZZbUJja1JqLXVHMTBR?oc=5",
+            "date": "2026-11-25T16:03+05:00"
+          },
+          {
             "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
             "source": "Sostav.ru",
             "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
             "date": "2026-11-25T09:45+05:00"
-          },
-          {
-            "title": "Продавцы Wildberries жалуются на падение выкупов товаров",
-            "source": "Вёрстка",
-            "link": "https://news.google.com/rss/articles/CBMimgFBVV95cUxOdUJfLXJ1a19xZUpCb1hVSXd2VGRYQ2RYdWcyb3llWFdlSUhvRlFmLWdQUzFBTnhBZ3hQYWxMMzhnVTBRcGplQ2lnNnotZUljRmVVYTAxaTNwNk15WVRwdGhlOFFGS2s0WXVrSVRLVzlSYlMxSmlTNDZYNndjeFVUUDRmU1E0Tjk0c2czWHVtV3FDbFROQk1OYkZ3?oc=5",
-            "date": "2026-11-25T01:26+05:00"
           }
         ]
       },
@@ -62,27 +62,27 @@
         "label": "Ozon",
         "items": [
           {
-            "title": "Отзыв об акции Озон «100% за обзор»",
-            "source": "Банки.ру",
-            "link": "https://news.google.com/rss/articles/CBMiVkFVX3lxTFAtWndseXpuN1FxTTZVWWFCX0F6VU5kMkVONXMyYjQxYlZyRWFxdllma2tfMHhHcUFwN0sxSFk3WDducVZJbHJnLWZXRlE4ZmNNSGJhelF3?oc=5",
-            "date": "2026-11-24T20:58+05:00"
+            "title": "Ozon начал выдавать справки селлерам, пострадавшим от атак беспилотников",
+            "source": "Frank Media",
+            "link": "https://news.google.com/rss/articles/CBMiQkFVX3lxTFBGcjBjVFI4S2M1ckNhNHpocUs3MVEwQWw4UzZaYnVfRDhDb0xmTUx0LWdQQkZPQUtvcG4xX0Jfam1Wdw?oc=5",
+            "date": "2026-11-25T20:33+05:00"
+          },
+          {
+            "title": "Ozon поможет продавцам оформить учёт потерь после пожаров на складах",
+            "source": "rb.ru",
+            "link": "https://news.google.com/rss/articles/CBMizAFBVV95cUxQVFk3QUZod0xjUVdERm9TaVd3VERNSFZPdFN1Yi1BQklsVnktd2U1N0lGcHM2RWZqQVVNc2pmUVNUR3lPeFp3cGM5R1E1RVhRWllXTjE1WUQ3eTZNYVRjTUZBUEdKemc5UmZQUnczb1oweVFqRkd2V1FBZ2RQMHpCZ0tfblpJMXkwWjFKQjVIbHBGd3YwOWp3R1RNSHZqSXNiUVRkNGFQc29tNjNlNnBMMTBmaHJpRVo4ZjZ6QmxXbndLeGxMdExmRTJjYkc?oc=5",
+            "date": "2026-11-24T21:00+05:00"
           },
           {
             "title": "Пострадавшие товары на складах Ozon: какие документы получит продавец и как оформить страховую выплату",
             "source": "Финансы Mail",
             "link": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPR2c5TzFrYnNHclZpb0pneWNJT2wwUjhTRkhJaDliaDU0QmItdWtmd2JRSVhTRjdZZ3Q1Ynd1QmIxX2M5cEU5cGhwdUR0dDJiYm1ha3dLNkVvS2Z3eG40dFVGV2Z0Yl9mRFNZUTM2MFhMMHRRV3QzNHdqMFBqS2hDVVpyXzJzQW90UEdJaFNNSWJtZEl1N3VKdmlIdmZzVUhwcnRqM0R4RFBxNEZiSWxneWpsUEc?oc=5",
             "date": "2026-11-24T18:15+05:00"
-          },
-          {
-            "title": "Сырный Михаил: кто это, откуда появился и что с ним продавать на Ozon",
-            "source": "OZON Seller",
-            "link": "https://news.google.com/rss/articles/CBMia0FVX3lxTFBCQWNCcGlENzZyMllRcERSc0xYVllOR0VHNWUtRzllc3ZhbUhxWUZodGVpRnBRSEJqQ21SYVN0VG5veWlEQjVKRnJ1Uk44YkR6WFZzc2JocWFabU9LVXJXZU43bnVZMUd3VWNV?oc=5",
-            "date": "2026-11-24T16:50+05:00"
           }
         ]
       }
     ]
   },
-  "updated_at": "2026-11-26T14:58+05:00",
+  "updated_at": "2026-11-27T08:50+05:00",
   "errors": []
 }
