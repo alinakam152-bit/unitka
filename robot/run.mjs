@@ -10,7 +10,7 @@ import reports from "../rnp-data.js";
 import { collectWB } from "./wb.mjs";
 import { collectOzon } from "./ozon.mjs";
 import { encrypt, decrypt } from "./crypto.mjs";
-const { indexRnpRows, bestPriceRows } = reports;
+const { indexRnpRows } = reports;
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -70,7 +70,12 @@ async function main() {
       } else if (st.mp === "ozon") {
         const cid = env[st.clientId], key = env[st.apiKey];
         if (!cid || !key) throw new Error(`нет ключей ${st.clientId} / ${st.apiKey} в Secrets`);
-        part = await collectOzon(st, cid, key, { http, log, fetchFile: fetchImpl, now, pause });
+        const prefix = st.apiKey.replace(/_API_KEY$/, "");
+        const performance = {
+          clientId: env[prefix + "_PERFORMANCE_CLIENT_ID"],
+          clientSecret: env[prefix + "_PERFORMANCE_CLIENT_SECRET"]
+        };
+        part = await collectOzon(st, cid, key, { http, log, performance, fetchFile: fetchImpl, now, pause });
       }
       Object.assign(meta, { ok: true, updatedAt: now.toISOString(), finTo: part.finTo, finFrom: part.finFrom,
         orderFrom: part.orderFrom, warnings: part.warnings, tokenExpires: part.tokenExpires, stockPartial: !!part.stockPartial });
@@ -98,13 +103,17 @@ async function main() {
         funnel.set(entry, [date, id, { ...funnel.get(entry)?.[2],
           ...Object.fromEntries(Object.entries(values).filter(([, value]) => Number.isFinite(value))) }]);
       }
-      for (const row of part.orderReport || []) orderReport.set(JSON.stringify(row.slice(0, 2)), row);
+      for (const row of part.orderReport || []) {
+        const entry = JSON.stringify(row.slice(0, 2));
+        if (part.orderReportComplete || !orderReport.has(entry)) orderReport.set(entry, row);
+      }
       if (meta.ok && part.stocks) for (const p of part.products) {
         const s = part.stocks[p.pid];
         if (!s) continue;
-        const transit = Number.isFinite(s.toClient) && !(st.mp === "wb" && part.stockPartial) ? s.toClient : null;
+        const transit = !part.stockPartial && Number.isFinite(s.toClient) ? s.toClient : null;
+        const fromClient = !part.stockPartial && Number.isFinite(s.fromClient) ? s.fromClient : null;
         stockHistory.set(JSON.stringify([snapshotDate, p.pid]), [snapshotDate, p.pid, {
-          stock: s.fbo + s.fbs, transit, fromClient: st.mp === "wb" && !part.stockPartial ? s.fromClient : null,
+          stock: s.fbo + s.fbs, transit, fromClient,
           price: p.price, stockPartial: !!part.stockPartial
         }]);
       }
@@ -112,7 +121,6 @@ async function main() {
   }
   data.funnel = [...funnel.values()];
   data.orderReport = [...orderReport.values()];
-  data.orderPrices = bestPriceRows(data.orderPrices, data.orderReport);
   data.stockHistory = [...stockHistory.values()];
 
   const enc = await encrypt(data, phrase);

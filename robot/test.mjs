@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { encrypt, decrypt } from "./crypto.mjs";
 import { finAgg, F, OrdAgg, mskParts } from "./lib.mjs";
 import { OrderFinance } from "./order-fin.mjs";
-import { addWbFinRow } from "./wb.mjs";
-import { addOzonAccrual, bucketOf, postingUnitPrice, postingPricePair, ozonOrderReport } from "./ozon.mjs";
+import { addWbFinRow, wbSearchPositions } from "./wb.mjs";
+import { addOzonAccrual, bucketOf, postingUnitPrice, postingPricePair, ozonOrderReport, ozonFunnel } from "./ozon.mjs";
+import { ozonAdStats } from "./ozon-ads.mjs";
 import reports from "../rnp-data.js";
 
 let n = 0;
@@ -201,5 +202,53 @@ await t("Без цены: штуки сохраняются, отмены не �
   orders.add("2026-11-11", "s:1", 12, true, false, null, 2);
   orders.add("2026-11-11", "s:1", 12, true, true, null, 1);
   assert.deepEqual(orders.result().ordersFbs, [["2026-11-11", "s:1", 3, 0, 1, 0, 2]]);
+});
+await t("WB: позиция относится к одному дню, нулевая позиция не попадает в РНП", async () => {
+  const dates = [];
+  const rows = await wbSearchPositions(async (url, { body }) => {
+    assert.match(url, /search-report\/table\/details$/);
+    assert.equal(body.currentPeriod.start, body.currentPeriod.end);
+    dates.push(body.currentPeriod.start);
+    return { data: { products: [{ nmId: 3, avgPosition: { current: 17 } }, { nmId: 4, avgPosition: { current: 0 } }] } };
+  }, {}, (nm) => "wb:" + nm, new Date("2026-11-27T15:00:00Z"), 0);
+  assert.equal(rows.length, 7);
+  assert.equal(dates[0], "2026-11-20");
+  assert.deepEqual(rows.at(-1), ["2026-11-26", "wb:3", { position: 17 }]);
+});
+await t("Ozon: позиция по связанным SKU взвешивается по показам, повтор строки не суммируется", async () => {
+  const rows = await ozonFunnel(async (path, { metrics }) => {
+    assert.equal(path, "/v1/analytics/data");
+    const row = (id, views, position) => ({
+      dimensions: [{ id }, { id: "2026-11-26" }],
+      metrics: metrics.map((name) => ({ hits_view_search: views, position_category: position })[name])
+    });
+    return { result: { data: [row(11, 10, 5), row(12, 30, 25), row(12, 30, 25)] } };
+  }, () => "oz:1", new Date("2026-11-27T15:00:00Z"), 0);
+  assert.deepEqual(rows, [["2026-11-26", "oz:1", { searchViews: 40, position: 20 }]]);
+});
+await t("Ozon: реклама по двум кампаниям учитывается один раз; смешанные места остаются вместе", async () => {
+  const date = "2026-11-26";
+  const row = (campaignId, views, clicks, expense) => ({ campaignId, sku: "16", date, views, clicks, expense });
+  const rows = await ozonAdStats(async (url, options) => {
+    if (url.endsWith("/token")) return { access_token: "demo" };
+    if (url.includes("/campaign?")) return { list: [
+      { id: "1", placement: ["PLACEMENT_TOP_PROMOTION"] }, { id: "2", placement: ["PLACEMENT_SEARCH_AND_CATEGORY"] }
+    ] };
+    assert.deepEqual(options.body, { campaignIds: ["1", "2"], dateFrom: date, dateTo: "2026-11-27" });
+    return { rows: [row("1", "100", "3", "6,50"), row("2", "200", "5", "10"), row("2", "200", "5", "10")] };
+  }, (sku) => "oz:" + sku, { clientId: "demo", clientSecret: "demo" }, new Date("2026-11-27T15:00:00Z"));
+  assert.deepEqual(rows, [[date, "oz:16", {
+    ozonClickAdViews: 300, ozonClickAdClicks: 8, ozonClickAdSpend: 16.5,
+    searchAdViews: 100, searchAdClicks: 3, searchAdSpend: 6.5,
+    combinedAdViews: 200, combinedAdClicks: 5, combinedAdSpend: 10
+  }]]);
+});
+await t("Ozon: выделение оплаты за заказ не удваивает рекламный расход и выплату", () => {
+  const fin = finAgg(), detail = [];
+  addOzonAccrual(fin, { date: "2026-11-26", total_amount: -10, non_item_fee: { type_id: 9999, accrued: -10 } },
+    () => "oz:1", "*oz", undefined, new Set(), { types: new Set([9999]), add: (...args) => detail.push(args) });
+  assert.deepEqual(detail, [["2026-11-26", "*oz", 10]]);
+  assert.equal(fin.rows()[0][F.ads], 10);
+  assert.equal(fin.rows()[0][F.pay], -10);
 });
 console.log(`\nВсе проверки пройдены: ${n}`);

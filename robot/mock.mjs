@@ -9,7 +9,10 @@ export const DEMO_STORES = [
 // Токен WB в виде JWT с exp через 20 дней — чтобы проверить предупреждение «ключ истекает».
 const exp = Math.floor(Date.now() / 1000) + 20 * 86400;
 const jwt = "x." + Buffer.from(JSON.stringify({ exp })).toString("base64url") + ".y";
-export const DEMO_ENV = { T1: jwt, C1: "1", K1: "k", C2: "2", K2: "k" };
+export const DEMO_ENV = {
+  T1: jwt, C1: "1", K1: "k", C2: "2", K2: "k",
+  K1_PERFORMANCE_CLIENT_ID: "1", K1_PERFORMANCE_CLIENT_SECRET: "demo"
+};
 
 function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const NAMES = [
@@ -100,6 +103,9 @@ export function mockFetch(now) {
           buyoutCount: Math.floor(orders * 0.8), buyoutPercent: orders ? 80 : 0 };
       })
     })));
+    if (path === "/api/v2/search-report/table/details") return ok({ data: { products: wbItems
+      .filter((it) => salesFor(it, body.currentPeriod.start, 1) > 0)
+      .map((it) => ({ nmId: it.sku, avgPosition: { current: 10 + it.i } })) } });
     if (path === "/api/v3/warehouses") return ok([{ id: 7, name: "Свой склад" }]);
     if (path === "/api/analytics/v3/sales-funnel/products") return ok({ data: { products: wbItems.map((it) => ({
       product: { nmId: it.sku }, statistic: { selected: { orderCount: salesFor(it, body.selectedPeriod.start, 1),
@@ -108,18 +114,29 @@ export function mockFetch(now) {
     if (path.startsWith("/api/v3/stocks/")) return ok({ stocks: wbItems.map((it) => ({ chrtId: it.sku * 10, amount: it.i % 5 === 0 ? 120 : 0 })) });
 
     // ---------- Ozon ----------
+    if (u.hostname === "api-performance.ozon.ru") {
+      if (path === "/api/client/token") return ok({ access_token: "demo" });
+      if (path === "/api/client/campaign") return ok({ list: [
+        { id: "1", placement: ["PLACEMENT_TOP_PROMOTION"] }, { id: "2", placement: ["PLACEMENT_SEARCH_AND_CATEGORY"] }
+      ] });
+      if (path === "/api/client/statistics/products/sku") return ok({ rows: body.campaignIds.flatMap((campaignId) =>
+        ozItems["1"].filter((it) => it.perDay > 0).flatMap((it) =>
+          eachDay(body.dateFrom, body.dateTo).map((date) => ({ campaignId, sku: it.sku, date,
+            views: Math.round(it.perDay * 100), clicks: Math.round(it.perDay * 5), expense: Math.round(it.perDay * 30) })))) });
+    }
     const items = ozItems[opts.headers?.["Client-Id"]] || [];
     if (path === "/v3/product/list") return ok({ result: { items: body.last_id ? [] : items.map((it) => ({ product_id: it.sku + 5 })), last_id: "" } });
     if (path === "/v3/product/info/list") return ok({ items: items.map((it) => ({ id: it.sku + 5, sku: it.sku, offer_id: it.offer, name: it.name, marketing_price: String(it.price), primary_image: [] })) });
     if (path === "/v4/product/info/stocks") return ok({ items: items.map((it) => ({ product_id: it.sku + 5, stocks: [{ type: "fbo", present: it.stock, reserved: 2 }, { type: "fbs", present: it.i % 4 === 0 ? 50 : 0, reserved: 0 }] })), cursor: "" });
     if (path === "/v1/analytics/stocks") return ok({ items: items.filter((it) => body.skus.includes(it.sku))
-      .map((it) => ({ sku: it.sku, outbound_pending_delivery: Math.round(it.perDay * 2) })) });
+      .map((it) => ({ sku: it.sku, outbound_pending_delivery: Math.round(it.perDay * 2), return_from_customer_stock_count: Math.round(it.perDay / 4) })) });
     if (path === "/v1/analytics/data") return ok({ result: { data: items.flatMap((it) =>
       eachDay(body.date_from, body.date_to).map((date) => {
         const orders = salesFor(it, date, 3);
-        const fields = [orders * 24, orders * 16, orders * 8, orders * 18, orders * 3, orders, orders ? 12 + it.i : 0,
-          Math.floor(orders * 0.8), 0, Math.ceil(orders * 0.2), orders * 6];
-        return { dimensions: [{ id: it.sku }, { id: date }], metrics: fields };
+        const fields = { hits_view: orders * 24, hits_view_search: orders * 16, hits_view_pdp: orders * 8,
+          session_view: orders * 18, hits_tocart: orders * 3, ordered_units: orders, position_category: orders ? 12 + it.i : 0,
+          delivered_units: Math.floor(orders * 0.8), returns: 0, cancellations: Math.ceil(orders * 0.2), session_view_pdp: orders * 6 };
+        return { dimensions: [{ id: it.sku }, { id: date }], metrics: body.metrics.map((name) => fields[name]) };
       })) } });
   if (path === "/v1/report/postings/create") {
     if (body.filter.delivery_schema.length !== 1) return fail(400, "Expected exactly one delivery schema");

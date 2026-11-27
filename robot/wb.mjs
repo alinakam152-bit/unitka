@@ -1,6 +1,6 @@
 import { OrderFinance } from "./order-fin.mjs";
 // Сбор данных одного магазина Wildberries. Только чтение.
-import { F, finAgg, Agg, OrdAgg, num, day, daysAgo, sleep, jwtExpires } from "./lib.mjs";
+import { F, finAgg, Agg, OrdAgg, num, day, daysAgo, eachDay, sleep, jwtExpires } from "./lib.mjs";
 
 const H = {
   content: "https://content-api.wildberries.ru",
@@ -114,7 +114,7 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
       const begin = daysAgo(start, now), end = daysAgo(Math.max(start - 29, 0), now);
       for (let i = 0; i < ids.length; i += 50) {
         const part = ids.slice(i, i + 50).join(",");
-        const res = await http(`${H.adv}/adv/v3/fullstats?ids=${part}&beginDate=${begin}&endDate=${end}`, { headers: auth, okEmpty: [400, 404] });
+        const res = await http(`${H.adv}/adv/v3/fullstats?ids=${part}&beginDate=${begin}&endDate=${end}`, { headers: auth });
         for (const c of res || []) for (const d of c.days || []) for (const app of d.apps || []) for (const n of app.nms || [])
           adsAgg.add(String(d.date).slice(0, 10), pid(n.nmId), { 2: num(n.sum), 3: num(n.views), 4: num(n.clicks), 5: num(n.orders), 6: num(n.sum_price) });
         await sleep(pause / 3);
@@ -192,6 +192,10 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
     out.funnel = funnel;
   } catch (e) { warnings.push(`Воронка WB: ${e.message}`); }
   try {
+    const funnel = await wbSearchPositions(http, auth, pid, now, pause);
+    (out.funnel ||= []).push(...funnel);
+  } catch (e) { warnings.push(`Позиции WB: ${e.message}`); }
+  try {
     const date = daysAgo(1, now), past = daysAgo(2, now);
     const rows = new Map((out.funnel || []).filter((row) => row[0] === date).map((row) => [row[1], row[2]]));
     for (let page = 0; page < 10; page++) {
@@ -216,6 +220,34 @@ export async function collectWB(store, token, { http, log, now = new Date(), fin
     }
   } catch (e) { warnings.push(`Время доставки WB: ${e.message}`); }
   return out;
+}
+
+export async function wbSearchPositions(http, headers, pid, now, pause) {
+  const rows = [];
+  let requests = 0;
+  for (const date of eachDay(daysAgo(7, now), daysAgo(1, now))) {
+    const limit = 1000;
+    for (let offset = 0; ; offset += limit) {
+      if (requests++ && pause) await sleep(Math.ceil(pause / 3));
+      const response = await http(`${H.analytics}/api/v2/search-report/table/details`, {
+        method: "POST", headers, body: {
+          currentPeriod: { start: date, end: date }, orderBy: { field: "avgPosition", mode: "asc" },
+          positionCluster: "all", includeSubstitutedSKUs: true, includeSearchTexts: true, limit, offset
+        }
+      });
+      const products = response?.data?.products;
+      if (!Array.isArray(products)) throw new Error("не удалось прочитать отчёт о позициях");
+      for (const product of products) {
+        const position = product.avgPosition?.current;
+        if (product.nmId && Number.isFinite(position) && position > 0) {
+          rows.push([date, pid(product.nmId), { position }]);
+        }
+      }
+      if (products.length < limit) break;
+      if (offset >= 99000) throw new Error("превышено число страниц отчёта о позициях");
+    }
+  }
+  return rows;
 }
 
 // Одна строка отчёта о реализации → суммы по статьям. Расходы — положительными числами.

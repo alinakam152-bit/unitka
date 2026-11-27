@@ -2,7 +2,8 @@ import { OrderFinance } from "./order-fin.mjs";
 // Сбор данных одного магазина Ozon. Только чтение.
 import { F, finAgg, Agg, OrdAgg, mskParts, num, daysAgo, eachDay, sleep } from "./lib.mjs";
 import reports from "../rnp-data.js";
-const { parseCsv, parseOzonReport, bestPriceRows, reportDay } = reports;
+import { ozonAdStats } from "./ozon-ads.mjs";
+const { parseCsv, parseOzonReport, reportDay } = reports;
 
 const HOST = "https://api-seller.ozon.ru";
 
@@ -47,7 +48,7 @@ export function postingPricePair(product, financial) {
   };
 }
 
-export async function collectOzon(store, clientId, apiKey, { http, log, fetchFile = globalThis.fetch, pause = 61000, now = new Date(), finDays = 90, orderDays = 60 }) {
+export async function collectOzon(store, clientId, apiKey, { http, log, performance, fetchFile = globalThis.fetch, pause = 61000, now = new Date(), finDays = 90, orderDays = 60 }) {
   const headers = { "Client-Id": clientId, "Api-Key": apiKey };
   const post = (path, body) => http(HOST + path, { method: "POST", headers, body });
   const pid = (sku) => `${store.id}:${sku}`;
@@ -148,13 +149,17 @@ export async function collectOzon(store, clientId, apiKey, { http, log, fetchFil
   log("  начисления");
   const fin = finAgg();
   const serviceTypes = new Set();
+  const orderAdTypes = new Set();
+  const orderAdSpend = new Agg(1);
+  const orderAds = { types: orderAdTypes, add: (date, id, spend) => orderAdSpend.add(date, id, { 2: spend }) };
   try {
     const res = await post("/v1/finance/accrual/types", {});
     const types = res?.types ?? res?.result?.types ?? res?.result ?? [];
     for (const type of Array.isArray(types) ? types : []) {
-      if (/кросс|непредвид|между склад|вывоз|cross.?dock/i.test(type.name ?? type.type_name ?? "")) {
-        serviceTypes.add(Number(type.id ?? type.type_id));
-      }
+      const name = type.name ?? type.type_name ?? "";
+      const id = Number(type.id ?? type.type_id);
+      if (/кросс|непредвид|между склад|вывоз|cross.?dock/i.test(name)) serviceTypes.add(id);
+      if (/оплата за заказ|продвижение за заказ|pay.?per.?order/i.test(name)) orderAdTypes.add(id);
     }
   } catch (e) { warnings.push(`Справочник начислений Ozon: ${e.message}`); }
   const days = eachDay(daysAgo(finDays, now), daysAgo(1, now));
@@ -162,7 +167,7 @@ export async function collectOzon(store, clientId, apiKey, { http, log, fetchFil
     let last = "";
     for (let guard = 0; guard < 500; guard++) {
       const res = await post("/v1/finance/accrual/by-day", { date: d, last_id: last });
-      for (const a of res?.accruals || []) addOzonAccrual(fin, a, (sku) => prod.get(sku)?.pid ?? pid(sku), "*" + store.id, orderFin, serviceTypes);
+      for (const a of res?.accruals || []) addOzonAccrual(fin, a, (sku) => prod.get(sku)?.pid ?? pid(sku), "*" + store.id, orderFin, serviceTypes, orderAds);
       last = res?.last_id || "";
       if (!last) break;
     }
@@ -175,14 +180,26 @@ export async function collectOzon(store, clientId, apiKey, { http, log, fetchFil
   const resolve = (sku, offer) => prod.get(sku)?.pid || (offer ? offers.get(offer) : null);
   const orderReport = await ozonOrderReport(post, fetchFile, resolve, now, pause);
   out.orderReport = orderReport.rows;
-  out.orderPrices = bestPriceRows(out.orderPrices, orderReport.rows);
+  out.orderReportComplete = orderReport.failures.length === 0;
   for (const { scheme, error } of orderReport.failures) {
     warnings.push(`Отчёт об отправлениях Ozon ${scheme.toUpperCase()}: ${error}`);
   }
   for (const scheme of orderReport.received) log(`    Отчёт об отправлениях ${scheme.toUpperCase()} получен`);
   try {
     out.funnel = await ozonFunnel(post, resolve, now, pause);
-  } catch (e) { warnings.push(`Воронка Ozon: ${e.message}`); }
+  } catch (e) {
+    warnings.push(e.status === 403 ? "Воронка Ozon: расширенная аналитика недоступна для этого магазина" : `Воронка Ozon: ${e.message}`);
+    if ([400, 403].includes(e.status)) {
+      if (pause) await sleep(pause);
+      try { out.funnel = await ozonFunnel(post, resolve, now, pause, { ordered_units: "funnelOrders" }); }
+      catch (error) { warnings.push(`Базовая аналитика Ozon: ${error.message}`); }
+    }
+  }
+  (out.funnel ||= []).push(...orderAdSpend.rows().map(([date, id, spend]) => [date, id, { orderAdSpend: spend }]));
+  if (performance?.clientId && performance?.clientSecret) {
+    try { out.funnel.push(...await ozonAdStats(http, resolve, performance, now)); }
+    catch (e) { warnings.push(`Рекламная детализация Ozon: ${e.status ? "HTTP " + e.status : e.message}`); }
+  } else warnings.push("Рекламная детализация Ozon: не подключён Performance API");
   if (out.stocks) {
     try {
       const skus = out.products.map((p) => Number(p.sku)).filter(Number.isSafeInteger);
@@ -191,13 +208,16 @@ export async function collectOzon(store, clientId, apiKey, { http, log, fetchFil
         if (i && pause) await sleep(1000);
         const response = await post("/v1/analytics/stocks", { skus: skus.slice(i, i + 100) });
         for (const row of response?.items ?? response?.result?.items ?? []) {
-          const id = resolve(String(row.sku));
-          if (id && row.outbound_pending_delivery != null) {
-            transit.set(id, (transit.get(id) ?? 0) + num(row.outbound_pending_delivery));
+          const id = resolve(String(row.sku), row.offer_id);
+          if (!id) continue;
+          const values = transit.get(id) || {};
+          for (const [source, target] of [["outbound_pending_delivery", "toClient"], ["return_from_customer_stock_count", "fromClient"]]) {
+            if (Number.isFinite(row[source])) values[target] = (values[target] ?? 0) + row[source];
           }
+          transit.set(id, values);
         }
       }
-      for (const [id, quantity] of transit) if (out.stocks[id]) out.stocks[id].toClient = quantity;
+      for (const [id, values] of transit) if (out.stocks[id]) Object.assign(out.stocks[id], values);
     } catch (e) { warnings.push(`Товары в пути Ozon: ${e.message}`); }
   }
   return out;
@@ -263,12 +283,17 @@ async function readOzonReportFile(fetchFile, address) {
   throw new Error("слишком много переадресаций файла отчёта");
 }
 
-async function ozonFunnel(post, resolve, now, pause) {
-  const fields = { hits_view: "views", hits_view_search: "searchViews", hits_view_pdp: "opens",
-    session_view: "visitors", hits_tocart: "carts", ordered_units: "funnelOrders",
-    position_category: "position", delivered_units: "funnelDelivered", returns: "funnelReturns", cancellations: "funnelCancelled",
-    session_view_pdp: "uniqueOpens" };
+const OZON_FUNNEL_FIELDS = {
+  hits_view: "views", hits_view_search: "searchViews", hits_view_pdp: "opens",
+  session_view: "visitors", hits_tocart: "carts", ordered_units: "funnelOrders",
+  position_category: "position", delivered_units: "funnelDelivered", returns: "funnelReturns",
+  cancellations: "funnelCancelled", session_view_pdp: "uniqueOpens"
+};
+
+export async function ozonFunnel(post, resolve, now, pause, fields = OZON_FUNNEL_FIELDS) {
   const metrics = Object.keys(fields), rows = new Map();
+  const searchViews = metrics.indexOf("hits_view_search");
+  const seen = new Set(), positions = new Map();
   for (let page = 0; page < 30; page++) {
     if (page && pause) await sleep(61000);
     const response = await post("/v1/analytics/data", {
@@ -277,17 +302,29 @@ async function ozonFunnel(post, resolve, now, pause) {
     });
     const data = response?.result?.data ?? response?.data ?? [];
     for (const item of data) {
-      const id = resolve(String(item.dimensions?.[0]?.id ?? ""));
+      const sku = String(item.dimensions?.[0]?.id ?? "");
+      const id = resolve(sku);
       const date = reportDay(item.dimensions?.[1]?.id);
       if (!id || !date) continue;
-      const line = rows.get(date + "|" + id) || [date, id, {}];
-      rows.set(date + "|" + id, line);
+      const skuDay = date + "|" + sku;
+      if (seen.has(skuDay)) continue;
+      seen.add(skuDay);
+      const key = date + "|" + id;
+      const line = rows.get(key) || [date, id, {}];
+      rows.set(key, line);
       for (const [index, metric] of metrics.entries()) {
         const value = item.metrics?.[index];
         if (!Number.isFinite(value)) continue;
         const field = fields[metric];
         if (field === "position") {
-          if (value > 0) line[2].position = Math.min(line[2].position ?? value, value);
+          if (value > 0) {
+            const weight = Math.max(1, item.metrics[searchViews] ?? 0);
+            const previous = positions.get(key) || { sum: 0, weight: 0 };
+            previous.sum += value * weight;
+            previous.weight += weight;
+            positions.set(key, previous);
+            line[2].position = previous.sum / previous.weight;
+          }
         } else line[2][field] = (line[2][field] ?? 0) + value;
       }
     }
@@ -300,7 +337,7 @@ async function ozonFunnel(post, resolve, now, pause) {
 const amt = (v) => (v && typeof v === "object" ? num(v.amount) : num(v));
 
 // Одно начисление Ozon → суммы по статьям. Ozon отдаёт расходы со знаком «−», мы храним их положительными.
-export function addOzonAccrual(fin, a, pid, star = "*", orderFin, serviceTypes = new Set()) {
+export function addOzonAccrual(fin, a, pid, star = "*", orderFin, serviceTypes = new Set(), orderAds) {
   const d = String(a.date).slice(0, 10);
   const total = amt(a.total_amount);
   let mapped = 0;
@@ -312,11 +349,16 @@ export function addOzonAccrual(fin, a, pid, star = "*", orderFin, serviceTypes =
     fin.add(d, id, v);
     if (bucket === F.logi) orderFin?.charge(ref, id, d, v);
   };
-  const serviceBucket = (s, posting = false) => {
+  const putService = (id, s, posting = false) => {
     const type = Number(s.type_id);
+    const amount = amt(s.accrued);
+    if (orderAds?.types.has(type)) {
+      orderAds.add(d, id, -amount);
+      put(id, F.ads, amount);
+      return;
+    }
     const bucket = bucketOf(type);
-    if (serviceTypes.has(type) || (!posting && bucket === F.logi)) return F.serviceLogi;
-    return bucket;
+    put(id, serviceTypes.has(type) || (!posting && bucket === F.logi) ? F.serviceLogi : bucket, amount);
   };
   if (a.accrued_category === "POSTING" && a.posting) {
     for (const p of a.posting.products || []) {
@@ -331,15 +373,15 @@ export function addOzonAccrual(fin, a, pid, star = "*", orderFin, serviceTypes =
         orderFin?.charge(ref, id, d, v);
         mapped += sale + comm;
       }
-      for (const s of p.delivery?.services || []) put(id, serviceBucket(s, true), amt(s.accrued));
+      for (const s of p.delivery?.services || []) putService(id, s, true);
     }
   } else if (a.accrued_category === "ITEM" && a.item_fees) {
     for (const it of a.item_fees.fees || []) {
       const id = it.sku ? pid(String(it.sku)) : star;
-      for (const f of it.fees || []) put(id, serviceBucket(f), amt(f.accrued));
+      for (const f of it.fees || []) putService(id, f);
     }
   } else if (a.non_item_fee) {
-    put(star, serviceBucket(a.non_item_fee), amt(a.non_item_fee.accrued));
+    putService(star, a.non_item_fee);
   }
   // Всё, что не разложилось по статьям (например, грузоместа), — в «прочие» по магазину, чтобы итог сходился.
   const rest = total - mapped;

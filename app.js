@@ -1186,11 +1186,11 @@
     return history;
   }
 
-  function rnpForecast(pid, row, history) {
+  function rnpForecast(pid, row, history, archive) {
     if (!(row.orders > 0)) return { forecastProfit: row.spend == null ? null : -row.spend };
     const cost = state.costs[IX.prod.get(pid)?.offerId];
     const store = storeOf(pid);
-    if (IX.stores.get(store)?.mp === "ozon") {
+    if (archive && IX.stores.get(store)?.mp === "ozon") {
       const inputs = state.pulstat.inputs[store] || {};
       const saved = state.pulstat.products[pid];
       return pulstatForecast(row, cost, inputs, { buy: row.windowBuy != null ? row.windowBuy * 100 : null, ...saved });
@@ -1239,20 +1239,28 @@
       forecastCogs: row.orders * buy * adjustedCost, forecastOrders: row.orders };
   }
 
-  function rnpColumns(selected, product, storeIds, dates, imports) {
+  function rnpColumns(selected, product, storeIds, dates, archive) {
     const byDate = new Map(dates.map((date) => [date, new Map()]));
     const visibleStores = new Set(storeIds);
     const positionDays = new Map(storeIds.map((id) => [id, 0]));
     const history = rnpHistory(selected);
     const totals = {};
+    const imports = archive ? rnpImports() : {};
     const reportIndex = indexRnpRows(D.orderReport || []);
     for (const row of imports.orders || []) {
       const id = JSON.stringify(row.slice(0, 2));
-      const existing = reportIndex.get(id);
-      if (!existing || (row[2]?.orders ?? 0) >= (existing[2]?.orders ?? 0)) reportIndex.set(id, row);
+      if (!reportIndex.has(id)) reportIndex.set(id, row);
     }
     const reports = [...reportIndex.values()];
-    const priceRows = bestPriceRows(D.orderPrices || [], reports);
+    const orderCounts = indexRnpRows(D.orders);
+    const withinOrders = (date, pid, quantity) => {
+      const key = JSON.stringify([date, pid]);
+      const order = orderCounts.get(key);
+      const count = order ? order[2] - order[4] : reportIndex.get(key)?.[2]?.orders;
+      return quantity > 0 && quantity <= count;
+    };
+    const priceRows = bestPriceRows((D.orderPrices || []).filter(([date, pid, qty]) => withinOrders(date, pid, qty)),
+      reports.filter(([date, pid, values]) => withinOrders(date, pid, values.pairedQty)));
     function collect(rows, values) {
       for (const row of rows) {
         const items = byDate.get(row[0]);
@@ -1268,7 +1276,7 @@
     collect(priceRows, (r) => ({ pairedQty: r[2], sellerAmount: r[3], buyerAmount: r[4] }));
     collect(reports, ([, , row]) => ({ ...row, reportOrders: row.orders, reportCancelled: row.cancelled,
       reportDelivered: row.delivered, orders: null, cancelled: null, delivered: null, pairedQty: null, sellerAmount: null, buyerAmount: null }));
-    const metrics = combineRnpRows(D.funnel || [], imports.metrics || []);
+    const metrics = combineRnpRows(imports.metrics || [], D.funnel || []);
     collect(metrics, ([, , row]) => {
       const { stock, transit, fromClient, price, delivery, ...fields } = row;
       return { ...fields, manualDelivery: delivery };
@@ -1309,7 +1317,7 @@
         const ordersCovered = updated && date <= updated && date >= (store.orderFrom || addDays(updated, -60)) &&
           !warnings.some((warning) => /^Заказы FB[OS] Ozon:/.test(warning));
         const finCovered = store.finTo && date <= store.finTo && date >= (store.finFrom || addDays(store.finTo, -89));
-        const wbAdsCovered = store.mp === "wb" && updated && date <= updated && date >= addDays(updated, -90) &&
+        const wbAdsCovered = store.mp === "wb" && updated && date < updated && date >= addDays(updated, -90) &&
           Array.isArray(D.ads) && !warnings.some((warning) => warning.startsWith("Реклама WB:"));
         return [id, { values: {}, finCovered, ordersCovered, adsCovered: store.mp === "ozon" ? finCovered : wbAdsCovered }];
       }));
@@ -1379,9 +1387,6 @@
           row.nonSearchViews = outsideCategory;
           row.nonSearchBase = row.views;
         }
-        if (row.placementSpend != null || row.searchAdSpend != null || row.orderAdSpend != null) {
-          row.spend ??= (row.placementSpend ?? 0) + (row.searchAdSpend ?? 0) + (row.orderAdSpend ?? 0);
-        }
         if (store.adsCovered) row.spend ??= 0;
         const pair = pulstatPrices.get(date + "|" + pid);
         if (!(row.rollingBuyer > 0 && row.rollingBuyer <= row.rollingSeller)) {
@@ -1390,9 +1395,9 @@
         }
         row.pulstatBuyerFactor = rnpRatio(row.rollingBuyer, row.rollingSeller);
         addRnpValues(store.values, row);
-        addRnpValues(day, rnpForecast(pid, row, history.get(pid)));
+        addRnpValues(day, rnpForecast(pid, row, history.get(pid), archive));
         if (row.orders > 0) {
-          const buy = IX.stores.get(storeOf(pid))?.mp === "ozon"
+          const buy = archive && IX.stores.get(storeOf(pid))?.mp === "ozon"
             ? rnpRatio(state.pulstat.products[pid]?.buy, 100) ?? row.windowBuy : history.get(pid)?.buy;
           addRnpValues(day, buy == null ? { unknownBuy: row.orders } : { expectedUnits: row.orders * buy });
         }
@@ -1445,7 +1450,7 @@
         addRnpValues(totals, { factProfit: day.factProfit, factRevenue: day.factRevenue, factDays: 1 });
         if (factMissing || factUnclosed) addRnpValues(totals, { partialFactDays: 1 });
       }
-      if (day.forecastOrders > 0 || forecastProfit || (!forecastMissing && day.orders != null)) {
+      if (day.forecastOrders > 0 || (!(day.orders > 0) && (forecastProfit || (!forecastMissing && day.orders != null)))) {
         day.forecastProfit = forecastProfit ?? 0;
         addRnpValues(totals, { forecastProfit: day.forecastProfit, forecastRevenue, forecastCogs });
       } else {
@@ -1465,15 +1470,15 @@
       const partial = store.stockPartial || store.warnings?.some((warning) => /^Остатки.*WB:/.test(warning));
       const source = D.stocks[p.pid];
       stocks.set(id, [updated, p.pid, { stock, price: p.price, stockPartial: partial,
-        transit: store.mp === "wb" && !partial ? source.toClient : null,
-        fromClient: store.mp === "wb" && !partial ? source.fromClient : null }]);
+        transit: !partial ? source.toClient : null,
+        fromClient: !partial ? source.fromClient : null }]);
     }
     const manualStocks = (imports.metrics || []).filter(([, , values]) =>
       values.stock != null || values.transit != null || values.fromClient != null || values.price != null);
     const productIndex = new Map(selected.map((p) => [p.pid, p]));
     const dateIndex = new Map(dates.map((date, index) => [date, index]));
     const lastSnapshot = new Map();
-    for (const [date, pid, values] of combineRnpRows([...stocks.values()], manualStocks)) {
+    for (const [date, pid, values] of combineRnpRows(manualStocks, [...stocks.values()])) {
       const index = dateIndex.get(date), p = productIndex.get(pid);
       if (index == null || !p) continue;
       const { stock, transit, fromClient, price, stockPartial } = values;
@@ -1692,14 +1697,15 @@
     const dateFrom = custom ? requestedStart : addDays(dateTo, 1 - preset);
     const dayCount = (Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000 + 1;
     const wideDates = Array.from({ length: dayCount }, (_, i) => addDays(dateFrom, i));
+    const archive = q.get("source") === "archive";
     const { dates, columns, totals, positionDays } = rnpColumns(product ? [product] : products, product,
-      product ? [storeOf(product.pid)] : [...visibleStores], wideDates, rnpImports());
+      product ? [storeOf(product.pid)] : [...visibleStores], wideDates, archive);
     const ozonProducts = !product || product.mp === "ozon" ? products.filter((p) => p.mp === "ozon") : [];
     const ratio = rnpRatio;
     const factProfit = (c) => c.factProfit;
-    const forecastProfit = (c) => c.forecastProfit;
+    const forecastProfit = (c) => c.orders > 0 && !(c.forecastOrders > 0) ? null : c.forecastProfit;
     const factMargin = (c) => ratio(factProfit(c), c.factRevenue);
-    const forecastMargin = (c) => product?.mp === "ozon" && c !== totals ? c.pulstatMargin : ratio(forecastProfit(c), c.forecastRevenue);
+    const forecastMargin = (c) => archive && product?.mp === "ozon" && c !== totals ? c.pulstatMargin : ratio(forecastProfit(c), c.forecastRevenue);
     const forecastRoi = (c) => ratio(forecastProfit(c), c.forecastCogs);
     const buyRate = (c) => c.unknownBuy ? null : ratio(c.expectedUnits, c.orders);
     const stockDays = (c) => ratio(c.stock, totals.stockDays > 0 ? totals.stockSales / totals.stockDays : null);
@@ -1749,9 +1755,17 @@
         ["CPC · WB, ₽", (c) => ratio(c.wbSpend, c.clicks), money2],
         ["Расход · WB, ₽", (c) => c.wbSpend],
         ["Расход · Ozon, ₽", (c) => c.ozonSpend],
-        ["Полки и рекомендации · показы", (c) => c.placementViews], ["Полки и рекомендации · клики", (c) => c.placementClicks],
-        ["Полки и рекомендации · CTR, %", quotient("placementCtr"), pct], ["Полки и рекомендации · CPC, ₽", quotient("placementCpc"), money2],
-        ["Полки и рекомендации · расход, ₽", (c) => c.placementSpend],
+        ["Оплата за клик · Ozon · показы", (c) => c.ozonClickAdViews],
+        ["Оплата за клик · Ozon · клики", (c) => c.ozonClickAdClicks],
+        ["Оплата за клик · Ozon · расход, ₽", (c) => c.ozonClickAdSpend, money2],
+        ["Поиск и рекомендации · Ozon · показы", (c) => c.combinedAdViews],
+        ["Поиск и рекомендации · Ozon · клики", (c) => c.combinedAdClicks],
+        ["Поиск и рекомендации · Ozon · расход, ₽", (c) => c.combinedAdSpend, money2],
+        [`${archive ? "Полки и рекомендации" : "Карточки товаров · Ozon"} · показы`, (c) => c.placementViews],
+        [`${archive ? "Полки и рекомендации" : "Карточки товаров · Ozon"} · клики`, (c) => c.placementClicks],
+        [`${archive ? "Полки и рекомендации" : "Карточки товаров · Ozon"} · CTR, %`, quotient("placementCtr"), pct],
+        [`${archive ? "Полки и рекомендации" : "Карточки товаров · Ozon"} · CPC, ₽`, quotient("placementCpc"), money2],
+        [`${archive ? "Полки и рекомендации" : "Карточки товаров · Ozon"} · расход, ₽`, (c) => c.placementSpend],
         ["Поиск · показы", (c) => c.searchAdViews], ["Поиск · клики", (c) => c.searchAdClicks],
         ["Поиск · CTR, %", quotient("searchCtr"), pct], ["Поиск · CPC, ₽", quotient("searchCpc"), money2],
         ["Поиск · расход, ₽", (c) => c.searchAdSpend], ["Оплата за заказ · расход, ₽", (c) => c.orderAdSpend],
@@ -1787,7 +1801,7 @@
       "Воронка": "Отчёты о поиске и воронке по артикулам и датам. Для конверсий нужны обе исходные цифры.",
       "Реклама": "Статистика кампаний и расходы по размещениям. Для ДРР нужны расходы и сумма заказов или продаж за те же дни.",
       "Прибыль по начислениям": "Начисления, реклама, себестоимость и ставка налога.",
-      "Прогноз по заказам": "Цена заказа, реклама, себестоимость, выкуп и настройки расходов. Для Ozon проверь вводные PULSTAT и параметры Unit.",
+      "Прогноз по заказам": "Цены и реклама за выбранные даты, история выкупов и начислений, себестоимость и налог из настроек.",
       "Стоимость запасов": "Снимок остатков, себестоимость или цена продавца."
     };
     function rowHtml([label, value = () => null, format = int, kind = ""]) {
@@ -1829,7 +1843,7 @@
         <label class="rnp-check"><input type="checkbox" id="rnp-items"${showAll ? " checked" : ""}> Показать товары без остатка</label>
       </form>
       ${product ? `<div class="rnp-product-header">${thumb(product)}<div><strong>${esc(product.name || product.offerId || product.sku)}</strong><div class="small">${esc(product.offerId || product.sku)}${product.offerId && product.sku ? ` · Артикул площадки: ${esc(product.sku)}` : ""} · ${esc(storeName(storeOf(product.pid)))}</div></div></div>` : ""}
-      <p class="updated">${dmy(dates[0])} — ${dmy(dateTo)} · Даты отчётов по Москве</p>
+      <p class="updated">${dmy(dates[0])} — ${dmy(dateTo)} · Даты отчётов по Москве · ${archive ? "Режим архива" : "Данные из API площадок"}</p>
       <div class="rnp-summary">
         <div class="rnp-position-card"><span>Средняя позиция в поиске · ${positionCoverage} из ${dates.length} дн.</span><strong>${positionCoverage ? money2(position(totals)) : "Нет данных"}</strong></div>
         <div><span>Чистая прибыль · ${totals.factDays ?? 0} из ${dates.length} дн.</span><strong class="${factProfit(totals) == null ? "" : signCls(factProfit(totals))}">${rub(factProfit(totals))}</strong></div>
@@ -1841,9 +1855,11 @@
         <summary>${missingCount ? `Показатели с пропусками · ${int(missingCount)}` : "Показатели за период заполнены"}</summary>
         <h2>Средняя позиция по магазинам</h2>
         <ul>${[...positionDays].map(([id, filled]) => `<li>${esc(storeName(id))} · ${mpName(IX.stores.get(id)?.mp)} — ${filled} из ${dates.length} дн.</li>`).join("")}</ul>
-        ${marketplaces.has("wb") ? '<p><b>WB.</b> Источник — «Поисковые запросы: ваши товары». Для импорта нужны дата, артикул WB и средняя позиция за день.</p>' : ""}
-        ${marketplaces.has("ozon") ? '<p><b>Ozon.</b> Позиция приходит из аналитики Ozon, когда она доступна. Также её можно загрузить из «Техлиста» или дневного отчёта.</p>' : ""}
-        <button type="button" class="btn" id="rnp-open-reports">Открыть загрузку отчёта</button>
+        ${marketplaces.has("wb") ? '<p><b>WB.</b> Позиция приходит из API отчёта «Поисковые запросы: ваши товары». Робот проверяет последние 7 завершённых дней и сохраняет историю.</p>' : ""}
+        ${marketplaces.has("ozon") ? '<p><b>Ozon.</b> Позиция приходит из расширенной аналитики. Детализация рекламы приходит из Performance API за сегодня и вчера и накапливается ежедневно. Общий расход и ДРР считаются по начислениям.</p>' : ""}
+        ${stores.flatMap((store) => (store.warnings || [])
+          .filter((warning) => /воронка|аналитика|позиции|реклам|отправлен|остатки|доставк|товары в пути|не обновились/i.test(warning))
+          .map((warning) => `<p class="small"><b>${esc(store.name)}.</b> ${esc(warning)}</p>`)).join("")}
         ${missingCount ? '<p>«0 из» означает, что за выбранный период значений нет. При частичном заполнении показано, сколько дней имеют значение. Ноль в таблице считается заполненным. В дни без показов или заказов некоторые проценты могут не рассчитываться.</p>' : ""}
         ${missingRows.map(([section, items]) => `<h3>${section}</h3><p>${gapSources[section]}</p><ul>${items.map(([label, filled]) =>
           `<li>${label} — ${filled} из ${dates.length} дн.</li>`).join("")}</ul>`).join("")}
@@ -1851,8 +1867,12 @@
       ${!Number.isFinite(state.tax.rate) ? '<p class="banner small">Для прибыли по начислениям укажи ставку налога в <a href="#/settings">настройках</a>.</p>' : ""}
       ${totals.partialFactDays ? `<p class="muted small">По прибыли есть неполные данные за ${int(totals.partialFactDays)} дн. В итог вошли только рассчитанные строки.</p>` : ""}
       ${totals.stockPartial ? '<p class="muted small">Часть снимков остатков загружена с неполным покрытием складов.</p>' : ""}
-      ${rnpReportControls(stores.length ? stores : D.stores)}
-      ${pulstatSettings(ozonProducts, product)}
+      <details class="rnp-method"${archive ? " open" : ""}>
+        <summary>Архивные отчёты</summary>
+        <p>В архиве можно дополнить пропуски из сохранённых файлов и использовать расчёт PULSTAT. Данные API за те же даты имеют приоритет.</p>
+        <button type="button" class="btn" id="rnp-source">${archive ? "Вернуться к данным API" : "Открыть архив"}</button>
+        ${archive ? rnpReportControls(stores.length ? stores : D.stores) + pulstatSettings(ozonProducts, product) : ""}
+      </details>
       ${missingPulstat.length ? `<p class="muted small">Для прогноза Ozon не хватает ${missingPulstat.join(", ")}. У одного заказа может быть несколько пропусков.</p>` : ""}
       <div class="rnp-scroll" tabindex="0" role="region" aria-label="Показатели по дням">
         <table class="rnp-table" aria-label="РНП с ${dmy(dateFrom)} по ${dmy(dateTo)}">
@@ -1864,10 +1884,10 @@
       <details class="rnp-method">
         <summary>Как считаются показатели</summary>
         <p>Цена покупателя и соинвест считаются по сопоставимым парам цен, взвешенным по количеству. Для WB цена покупателя указана без скидки WB Кошелька. У соинвеста Ozon за 7 дней итог показывает последний рассчитанный день. ДРР делит расходы на заказы или продажи по совпадающим дням и магазинам. Заказы показаны без отмен, продажи — за вычетом возвратов.</p>
-        <p>Фактическая прибыль берётся из начислений и настроек. Для WB прогноз использует 28 дней начислений и оценку выкупа по связанным заказам. Последние 14 дней исключены из оценки выкупа, чтобы дать заказам время на доставку и возврат.</p>
-        <p>Для Ozon используются ноябрьские формулы PULSTAT. В расчёт входят комиссия, эквайринг, совокупный налог УСН и НДС, себестоимость с браком, тариф логистики, наценка за нелокальную продажу, доставка до ПВЗ, обработка возврата и реклама. Цена для налога учитывает соинвест по доступным парам цен за семь дней. При отсутствии пар берётся цена продавца, как в образце. Маржа делится на ожидаемую выручку, ROI — на ожидаемую себестоимость. Сводка прогноза суммирует рассчитанные позиции.</p>
+        <p>Фактическая прибыль берётся из начислений и настроек. Прогноз по API использует 28 дней начислений и оценку выкупа по связанным заказам. Последние 14 дней исключены из оценки выкупа, чтобы дать заказам время на доставку и возврат. Себестоимость, свои расходы и налог берутся из настроек. Маржа делится на ожидаемую выручку, ROI — на ожидаемую себестоимость.</p>
+        ${archive ? '<p>В режиме архива для Ozon прогноз использует вводные PULSTAT по магазину и артикулу.</p>' : ""}
         <p>Показатели воронки и рекламы берутся из отчётов. Уникальные посетители в сводке — сумма по товарам и дням, один человек может входить несколько раз. Переходы в карточку WB выводятся отдельно от уникальных посетителей. Время доставки WB берётся из воронки продаж, время Ozon — из доставленных отправлений с обеими датами.</p>
-        <p>В каждой дате показан снимок остатков, итог берётся по последнему снимку каждого товара за период. Оценка стоимости включает товар в пути к покупателю, когда по нему есть данные. Прочерк означает, что данных для расчёта нет.${product ? " Расходы без артикула входят в сводку магазина." : ""}</p>
+        <p>В каждой дате показан снимок остатков, итог берётся по последнему снимку каждого товара за период. В пути к покупателю и от него на Ozon показаны данные складов FBO. Оценка стоимости включает товар в пути к покупателю, когда по нему есть данные. Прочерк означает, что данных для расчёта нет.${product ? " Расходы без артикула входят в сводку магазина." : ""}</p>
       </details>`;
     const navigate = () => { location.hash = "#/rnp" + (q.size ? "?" + q : ""); };
     const periodForm = app.querySelector("#rnp-filter-form");
@@ -1916,10 +1936,10 @@
     }
     bindPulstatSettings();
     bindRnpReports();
-    app.querySelector("#rnp-open-reports").addEventListener("click", () => {
-      const reports = app.querySelector("#rnp-reports");
-      reports.open = true;
-      reports.querySelector("summary").focus();
+    app.querySelector("#rnp-source").addEventListener("click", () => {
+      if (archive) q.delete("source");
+      else q.set("source", "archive");
+      navigate();
     });
   }
 
