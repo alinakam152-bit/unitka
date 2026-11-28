@@ -1,34 +1,34 @@
 {
   "rates": {
-    "date": "2026-11-27",
+    "date": "2026-11-28",
     "source": "ЦБ РФ (cbr-xml-daily.ru)",
     "items": [
       {
         "code": "CNY",
         "name": "Юань",
-        "value": 12.3184,
-        "previous": 12.3154,
-        "change": 0.003
+        "value": 12.327,
+        "previous": 12.3184,
+        "change": 0.0086
       },
       {
         "code": "USD",
         "name": "Доллар",
-        "value": 82.1265,
-        "previous": 82.313,
-        "change": -0.1865
+        "value": 82.2732,
+        "previous": 82.1265,
+        "change": 0.1467
       },
       {
         "code": "EUR",
         "name": "Евро",
-        "value": 89.8053,
-        "previous": 90.2397,
-        "change": -0.4344
+        "value": 90.2948,
+        "previous": 89.8053,
+        "change": 0.4895
       }
     ]
   },
   "checked": {
-    "rates": "2026-11-27T14:56+05:00",
-    "news": "2026-11-27T14:56+05:00"
+    "rates": "2026-11-28T08:46+05:00",
+    "news": "2026-11-28T08:46+05:00"
   },
   "news": {
     "source": "Google Новости",
@@ -38,10 +38,10 @@
         "label": "Wildberries",
         "items": [
           {
-            "title": "Российский Wildberries \"кинул\" продавцов на деньги: что известно о скандальных случаях",
-            "source": "24 Канал",
-            "link": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPWS12WUVhanpxcUEtM3pzLS1VQ3l4TW9McWZrUlNXMjdPdWdlcHd6Y2dONlJCMjFXdU1pZmlDc1Qzc1dkWGhERlV6VWtWaGJIekdOVjBIT25LeDFfMUZ6ZTN2QkVMTmt0ZmRWSHBWcmxQeWU5MWh5ckJ5ZFJHaXpEaTdaY3pYUlJvMnN4TTZzaEZFR05tbEpXNEhESm14QlBmSkHSAacBQVVfeXFMTUFDb0JJWm96Zno4cEhKaEt4XzdEc1EzUHRPRU5aSkJpN3hOeXlRZl8zcFEycFJsUVN5Y3FkOFVaOXFxNUFQZTJ4VnRmTUdfbG1hakJzdklHYUMyQ2xlVl9PME9IeEM5eG9oT1ZVLWJ5cHlKSENqY1hPSHNsY2thdUNzemFoOEVsd1RxUDczbDNQVUNONDhXemdMQ3dUdlZNRWZRWG9OWXc?oc=5",
-            "date": "2026-11-25T19:13+05:00"
+            "title": "Массовый отток селлеров с маркетплейсов: почему это произошло и как мы изменили подход к торговле, убрав главные риски",
+            "source": "Sostav.ru",
+            "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFAwSnN2MG1NdGRGYVlHQWRtRWdXSGQ1RjJiOGs3VXNaZ05aU0NzNEJ6alFjSWNVb1JKbXl4T29rMmNtSERobENvRmpsNTFDZGYxRUE?oc=5",
+            "date": "2026-11-26T19:45+05:00"
           },
           {
             "title": "\"Wildberries просто бросил\": в России продавцы массово жалуются на невыплату компенсаций",
@@ -83,6 +83,6 @@
       }
     ]
   },
-  "updated_at": "2026-11-27T14:56+05:00",
+  "updated_at": "2026-11-28T08:46+05:00",
   "errors": []
 }
